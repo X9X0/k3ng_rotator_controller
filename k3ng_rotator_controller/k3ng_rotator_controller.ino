@@ -1117,6 +1117,8 @@
 #include <avr/pgmspace.h>
 #include <EEPROM.h>
 #include <math.h>
+//#include "rotator_settings.h"
+#include <Wire.h>
 
 #include "rotator_hardware.h"
 
@@ -1225,6 +1227,11 @@
 
 #ifdef FEATURE_RTC_DS1307
   #include <RTClib.h>
+#endif
+
+#ifdef FEATURE_DS3231_RTC
+  #include <RTClib.h>
+  RTC_DS3231 rtc;
 #endif
 
 #ifdef FEATURE_RTC_PCF8583
@@ -1890,6 +1897,16 @@ void setup() {
 
   run_this_once();
 
+   #ifdef FEATURE_Y_AZIMUTH_STEPPER
+  pinMode(AZIMUTH_STEPPER_ENABLE_PIN, OUTPUT);
+  digitalWrite(AZIMUTH_STEPPER_ENABLE_PIN, LOW); // LOW = enabled
+#endif
+
+#ifdef FEATURE_Y_ELEVATION_STEPPER
+  pinMode(ELEVATION_STEPPER_ENABLE_PIN, OUTPUT);
+  digitalWrite(ELEVATION_STEPPER_ENABLE_PIN, LOW); // LOW = enabled
+#endif
+
 
 }
 
@@ -2086,6 +2103,33 @@ void loop() {
     service_calc_satellite_data(0,0,0,SERVICE_CALC_DO_NOT_PRINT_HEADER,SERVICE_CALC_SERVICE,SERVICE_CALC_DO_NOT_PRINT_DONE,0);
     //service_calculate_multi_satellite_upcoming_aos_and_los(SERVICE_CALC_SERVICE);
   #endif
+
+   #ifdef FEATURE_Y_AZIMUTH_STEPPER
+  if (/* isAzimuthIdle() */ false) {
+    digitalWrite(AZIMUTH_STEPPER_ENABLE_PIN, HIGH);  // disable
+  } else {
+    digitalWrite(AZIMUTH_STEPPER_ENABLE_PIN, LOW);   // enable
+  }
+#endif
+
+#ifdef FEATURE_Y_ELEVATION_STEPPER
+  if (/* isElevationIdle() */ false) {
+    digitalWrite(ELEVATION_STEPPER_ENABLE_PIN, HIGH);  // disable
+  } else {
+    digitalWrite(ELEVATION_STEPPER_ENABLE_PIN, LOW);   // enable
+  }
+#endif
+
+#ifdef FEATURE_DS3231_RTC
+  static unsigned long lastLog = 0;
+  if (millis() - lastLog > 60000) {
+    DateTime now = rtc.now();
+    Serial.printf("RTC time: %02d:%02d:%02d Date: %04d-%02d-%02d\n",
+      now.hour(), now.minute(), now.second(),
+      now.year(), now.month(), now.day());
+    lastLog = millis();
+  }
+#endif
 
   check_for_reset_flag();
 
@@ -11263,6 +11307,16 @@ void initialize_peripherals(){
       debug.println("initialize_peripherals: begin complete");
     #endif // DEBUG_RTC    
   #endif // FEATURE_RTC_DS1307
+   
+  #ifdef FEATURE_DS3231_RTC
+  Wire.begin();
+  if (!rtc.begin()) {
+    Serial.println("Error: DS3231 RTC not found");
+  } else if (rtc.lostPower()) {
+    Serial.println("RTC lost power – setting to compile time");
+    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+  }
+#endif
 
   #ifdef FEATURE_ETHERNET
     Ethernet.begin(mac, ip, gateway, subnet);
