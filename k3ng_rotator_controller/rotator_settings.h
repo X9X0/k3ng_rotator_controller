@@ -390,4 +390,19 @@ You can tweak these, but read the online documentation!
 
 #define NEXTION_GSC_STARTUP_DELAY 0
 
+// Choose your features here:
+#define FEATURE_Y_AZIMUTH_STEPPER
+#define FEATURE_Y_ELEVATION_STEPPER
+#define FEATURE_DS3231_RTC
+
+// --- Stepper enable pins ---
+#ifdef FEATURE_Y_AZIMUTH_STEPPER
+  #define AZIMUTH_STEPPER_ENABLE_PIN 8   // Change as needed
+#endif
+
+#ifdef FEATURE_Y_ELEVATION_STEPPER
+  #define ELEVATION_STEPPER_ENABLE_PIN 9 // Change as needed
+#endif
+
+
 
