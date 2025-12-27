@@ -1406,9 +1406,29 @@ struct config_t {
     float calibration_az_from[CALIBRATION_POINTS];
     float calibration_az_to[CALIBRATION_POINTS];
     float calibration_el_from[CALIBRATION_POINTS];
-    float calibration_el_to[CALIBRATION_POINTS]; 
+    float calibration_el_to[CALIBRATION_POINTS];
     byte calibration_az_flag[CALIBRATION_POINTS];  // 0 = empty, 1 = default endpoint, 2 = sun calibration point, 3 = moon calibration point
     byte calibration_el_flag[CALIBRATION_POINTS];
+  #endif
+  #if defined(FEATURE_AZ_POSITION_HMC5883L) || defined(FEATURE_AZ_POSITION_HMC5883L_USING_JARZEBSKI_LIBRARY) || \
+      defined(FEATURE_AZ_POSITION_DFROBOT_QMC5883) || defined(FEATURE_AZ_POSITION_MECHASOLUTION_QMC5883) || \
+      defined(FEATURE_AZ_POSITION_POLOLU_LSM303) || defined(FEATURE_AZ_POSITION_ADAFRUIT_LSM303)
+    int16_t magnetometer_x_min;
+    int16_t magnetometer_y_min;
+    int16_t magnetometer_z_min;
+    int16_t magnetometer_x_max;
+    int16_t magnetometer_y_max;
+    int16_t magnetometer_z_max;
+    byte magnetometer_calibration_valid;  // 0 = uncalibrated, 1 = calibrated
+  #endif
+  #if defined(FEATURE_ELEVATION_CONTROL) && (defined(FEATURE_EL_POSITION_ADAFRUIT_LSM303) || defined(FEATURE_EL_POSITION_POLOLU_LSM303))
+    int16_t el_magnetometer_x_min;
+    int16_t el_magnetometer_y_min;
+    int16_t el_magnetometer_z_min;
+    int16_t el_magnetometer_x_max;
+    int16_t el_magnetometer_y_max;
+    int16_t el_magnetometer_z_max;
+    byte el_magnetometer_calibration_valid;
   #endif
 } configuration;
 
@@ -2026,6 +2046,15 @@ void loop() {
   #ifdef FEATURE_LIMIT_SENSE
     check_limit_sense();
   #endif // FEATURE_LIMIT_SENSE
+
+  #if defined(FEATURE_AZ_POSITION_HMC5883L) || defined(FEATURE_AZ_POSITION_HMC5883L_USING_JARZEBSKI_LIBRARY) || \
+      defined(FEATURE_AZ_POSITION_DFROBOT_QMC5883) || defined(FEATURE_AZ_POSITION_MECHASOLUTION_QMC5883) || \
+      defined(FEATURE_AZ_POSITION_POLOLU_LSM303) || defined(FEATURE_AZ_POSITION_ADAFRUIT_LSM303)
+    if (manual_mag_cal_active) {
+      calibrate_magnetometer_manual(1);  // Update manual calibration
+    }
+    service_magnetometer_calibration();  // Service automatic calibration state machine
+  #endif
 
   #ifdef FEATURE_MOON_TRACKING
     service_moon_tracking();
@@ -7405,7 +7434,250 @@ void read_settings_from_eeprom(){
     configuration.calibration_el_flag[1] = 1;  // 1 = default endpoint 
 
   }  //initialize_calibration_tables
+
+// --------------------------------------------------------------
+float interpolate_calibration_table(float input_value, float *from_array, float *to_array, byte *flag_array, byte num_points) {
+
+  // Find bracketing points
+  byte lower_index = 255;
+  byte upper_index = 255;
+
+  for (byte i = 0; i < num_points; i++) {
+    if (flag_array[i] == 0) continue;  // Skip empty slots
+
+    if (from_array[i] <= input_value) {
+      if (lower_index == 255 || from_array[i] > from_array[lower_index]) {
+        lower_index = i;
+      }
+    }
+    if (from_array[i] >= input_value) {
+      if (upper_index == 255 || from_array[i] < from_array[upper_index]) {
+        upper_index = i;
+      }
+    }
+  }
+
+  // Handle edge cases
+  if (lower_index == 255 && upper_index == 255) {
+    return input_value;  // No calibration data
+  }
+  if (lower_index == upper_index) {
+    return to_array[lower_index];  // Exact match
+  }
+  if (lower_index == 255) {
+    return to_array[upper_index];  // Below lowest point, use lowest
+  }
+  if (upper_index == 255) {
+    return to_array[lower_index];  // Above highest point, use highest
+  }
+
+  // Linear interpolation
+  float from_span = from_array[upper_index] - from_array[lower_index];
+  float to_span = to_array[upper_index] - to_array[lower_index];
+  float ratio = (input_value - from_array[lower_index]) / from_span;
+
+  return to_array[lower_index] + (ratio * to_span);
+}
+
+// --------------------------------------------------------------
+byte add_calibration_point(byte axis, float from_value, float to_value, byte flag_type) {
+  // axis: AZ or EL
+  // flag_type: 2=sun, 3=moon, 4=user
+
+  float *from_array = (axis == AZ) ? configuration.calibration_az_from : configuration.calibration_el_from;
+  float *to_array = (axis == AZ) ? configuration.calibration_az_to : configuration.calibration_el_to;
+  byte *flag_array = (axis == AZ) ? configuration.calibration_az_flag : configuration.calibration_el_flag;
+
+  // Find empty slot
+  for (byte i = 0; i < CALIBRATION_POINTS; i++) {
+    if (flag_array[i] == 0) {
+      from_array[i] = from_value;
+      to_array[i] = to_value;
+      flag_array[i] = flag_type;
+      configuration_dirty = 1;
+
+      #ifdef DEBUG_CALIBRATION
+        debug.print(F("add_calibration_point: Added at slot "));
+        debug.print(i);
+        debug.print(F(" from="));
+        debug.print(from_value);
+        debug.print(F(" to="));
+        debug.println(to_value);
+      #endif
+
+      return i;  // Return slot number
+    }
+  }
+
+  #ifdef DEBUG_CALIBRATION
+    debug.println(F("add_calibration_point: Table full"));
+  #endif
+
+  return 255;  // Table full
+}
+
+// --------------------------------------------------------------
+byte remove_calibration_point(byte axis, byte index) {
+  // Validate index
+  if (index >= CALIBRATION_POINTS) return 0;
+
+  byte *flag_array = (axis == AZ) ? configuration.calibration_az_flag : configuration.calibration_el_flag;
+
+  // Don't allow removal of default endpoints (flag == 1)
+  if (flag_array[index] == 1) {
+    #ifdef DEBUG_CALIBRATION
+      debug.print(F("remove_calibration_point: Cannot remove default endpoint at "));
+      debug.println(index);
+    #endif
+    return 0;
+  }
+
+  flag_array[index] = 0;  // Mark as empty
+  configuration_dirty = 1;
+
+  #ifdef DEBUG_CALIBRATION
+    debug.print(F("remove_calibration_point: Removed slot "));
+    debug.println(index);
+  #endif
+
+  return 1;
+}
+
+// --------------------------------------------------------------
+void clear_calibration_table(byte axis, byte clear_defaults) {
+  // clear_defaults: 0 = keep endpoints, 1 = clear all
+
+  float *from_array = (axis == AZ) ? configuration.calibration_az_from : configuration.calibration_el_from;
+  float *to_array = (axis == AZ) ? configuration.calibration_az_to : configuration.calibration_el_to;
+  byte *flag_array = (axis == AZ) ? configuration.calibration_az_flag : configuration.calibration_el_flag;
+
+  for (byte i = 0; i < CALIBRATION_POINTS; i++) {
+    if (!clear_defaults && flag_array[i] == 1) continue;  // Keep defaults
+
+    from_array[i] = 0;
+    to_array[i] = 0;
+    flag_array[i] = 0;
+  }
+
+  configuration_dirty = 1;
+
+  #ifdef DEBUG_CALIBRATION
+    debug.print(F("clear_calibration_table: Cleared axis="));
+    debug.print(axis);
+    debug.print(F(" clear_defaults="));
+    debug.println(clear_defaults);
+  #endif
+}
+
+// --------------------------------------------------------------
+#if defined(FEATURE_SUN_TRACKING) || defined(FEATURE_MOON_TRACKING)
+byte collect_calibration_point_automatic(byte axis, byte celestial_type) {
+  // celestial_type: 2=sun, 3=moon
+
+  float actual_position = 0;
+  float measured_position = 0;
+
+  // Get actual celestial position
+  if (celestial_type == 2) {  // Sun
+    #ifdef FEATURE_SUN_TRACKING
+      update_sun_position();
+      actual_position = (axis == AZ) ? sun_azimuth : sun_elevation;
+    #else
+      return 255;  // Sun tracking not available
+    #endif
+  } else if (celestial_type == 3) {  // Moon
+    #ifdef FEATURE_MOON_TRACKING
+      update_moon_position();
+      actual_position = (axis == AZ) ? moon_azimuth : moon_elevation;
+    #else
+      return 255;  // Moon tracking not available
+    #endif
+  } else {
+    return 255;  // Invalid celestial type
+  }
+
+  // Get measured position (raw sensor reading before calibration)
+  if (axis == AZ) {
+    read_azimuth(1);  // Force fresh reading
+    measured_position = raw_azimuth;
+  } else {
+    #ifdef FEATURE_ELEVATION_CONTROL
+      read_elevation(1);
+      measured_position = elevation;
+    #else
+      return 255;  // Elevation control not available
+    #endif
+  }
+
+  #ifdef DEBUG_CALIBRATION
+    debug.print(F("collect_calibration_point_automatic: Measured="));
+    debug.print(measured_position);
+    debug.print(F(" Actual="));
+    debug.println(actual_position);
+  #endif
+
+  // Add to calibration table
+  return add_calibration_point(axis, measured_position, actual_position, celestial_type);
+}
+#endif // FEATURE_SUN_TRACKING || FEATURE_MOON_TRACKING
+
 #endif //FEATURE_CALIBRATION
+
+// --------------------------------------------------------------
+// Helper functions for parsing and validation
+// --------------------------------------------------------------
+
+// Parse axis character (A/E) to constant (AZ/EL), returns 0 if invalid
+byte parse_axis(char axis_char) {
+  if (toupper(axis_char) == 'A') {
+    return AZ;
+  } else if (toupper(axis_char) == 'E') {
+    return EL;
+  }
+  return 0;
+}
+
+// Find character position in buffer, returns 0 if not found
+byte find_char_in_buffer(char* buffer, char delimiter, byte start, byte max_index) {
+  for (byte i = start; i < max_index; i++) {
+    if (buffer[i] == delimiter) {
+      return i;
+    }
+  }
+  return 0;
+}
+
+// Parse float from buffer range [start, end)
+float parse_float_from_buffer(char* buffer, byte start, byte end) {
+  char temp_str[16];
+  byte len = end - start;
+
+  if (len >= 16) {
+    return 0.0;  // String too long
+  }
+
+  for (byte i = 0; i < len; i++) {
+    temp_str[i] = buffer[start + i];
+  }
+  temp_str[len] = 0;
+
+  return atof(temp_str);
+}
+
+// Validate heading is in valid range
+byte validate_heading(float heading, byte axis) {
+  if (axis == AZ) {
+    return (heading >= 0 && heading < 451);  // Allow wrap-around modes
+  } else if (axis == EL) {
+    return (heading >= 0 && heading <= 180);
+  }
+  return 0;
+}
+
+// Check if character is a digit
+byte is_digit(char ch) {
+  return (ch >= '0' && ch <= '9');
+}
 
 // --------------------------------------------------------------
 void initialize_eeprom_with_defaults(){
@@ -7475,6 +7747,28 @@ void initialize_eeprom_with_defaults(){
     configuration.el_stepper_motor_last_direction = STEPPER_UNDEF;
     configuration.el_stepper_motor_last_pin_state = LOW;
   #endif //FEATURE_STEPPER_MOTOR
+
+  #if defined(FEATURE_AZ_POSITION_HMC5883L) || defined(FEATURE_AZ_POSITION_HMC5883L_USING_JARZEBSKI_LIBRARY) || \
+      defined(FEATURE_AZ_POSITION_DFROBOT_QMC5883) || defined(FEATURE_AZ_POSITION_MECHASOLUTION_QMC5883) || \
+      defined(FEATURE_AZ_POSITION_POLOLU_LSM303) || defined(FEATURE_AZ_POSITION_ADAFRUIT_LSM303)
+    configuration.magnetometer_x_min = 32767;
+    configuration.magnetometer_y_min = 32767;
+    configuration.magnetometer_z_min = 32767;
+    configuration.magnetometer_x_max = -32768;
+    configuration.magnetometer_y_max = -32768;
+    configuration.magnetometer_z_max = -32768;
+    configuration.magnetometer_calibration_valid = 0;
+  #endif
+
+  #if defined(FEATURE_ELEVATION_CONTROL) && (defined(FEATURE_EL_POSITION_ADAFRUIT_LSM303) || defined(FEATURE_EL_POSITION_POLOLU_LSM303))
+    configuration.el_magnetometer_x_min = 32767;
+    configuration.el_magnetometer_y_min = 32767;
+    configuration.el_magnetometer_z_min = 32767;
+    configuration.el_magnetometer_x_max = -32768;
+    configuration.el_magnetometer_y_max = -32768;
+    configuration.el_magnetometer_z_max = -32768;
+    configuration.el_magnetometer_calibration_valid = 0;
+  #endif
 
   write_settings_to_eeprom();
 
@@ -8126,6 +8420,114 @@ void check_timed_interval(){
 } /* check_timed_interval */
 #endif // FEATURE_TIMED_BUFFER
 // --------------------------------------------------------------
+
+// ============================== MAGNETOMETER ABSTRACTION ==============================
+#if defined(FEATURE_AZ_POSITION_HMC5883L) || defined(FEATURE_AZ_POSITION_HMC5883L_USING_JARZEBSKI_LIBRARY) || \
+    defined(FEATURE_AZ_POSITION_DFROBOT_QMC5883) || defined(FEATURE_AZ_POSITION_MECHASOLUTION_QMC5883) || \
+    defined(FEATURE_AZ_POSITION_POLOLU_LSM303) || defined(FEATURE_AZ_POSITION_ADAFRUIT_LSM303)
+
+struct MagnetometerReading {
+  int16_t x;
+  int16_t y;
+  int16_t z;
+  byte valid;
+};
+
+MagnetometerReading read_magnetometer_raw() {
+  MagnetometerReading result = {0, 0, 0, 0};
+
+  #ifdef FEATURE_AZ_POSITION_HMC5883L
+    MagnetometerScaled scaled = compass.ReadScaledAxis();
+    result.x = (int16_t)(scaled.XAxis * 1000);
+    result.y = (int16_t)(scaled.YAxis * 1000);
+    result.z = 0;
+    result.valid = 1;
+  #endif
+
+  #ifdef FEATURE_AZ_POSITION_HMC5883L_USING_JARZEBSKI_LIBRARY
+    Vector norm = compass.readNormalize();
+    result.x = (int16_t)(norm.XAxis * 100);
+    result.y = (int16_t)(norm.YAxis * 100);
+    result.z = (int16_t)(norm.ZAxis * 100);
+    result.valid = 1;
+  #endif
+
+  #if defined(FEATURE_AZ_POSITION_DFROBOT_QMC5883)
+    Vector norm = compass.readNormalize();
+    result.x = (int16_t)(norm.XAxis * 100);
+    result.y = (int16_t)(norm.YAxis * 100);
+    result.z = (int16_t)(norm.ZAxis * 100);
+    result.valid = 1;
+  #endif
+
+  #if defined(FEATURE_AZ_POSITION_MECHASOLUTION_QMC5883)
+    int mecha_x, mecha_y, mecha_z, mecha_azimuth;
+    compass.read(&mecha_x, &mecha_y, &mecha_z, &mecha_azimuth);
+    result.x = (int16_t)mecha_x;
+    result.y = (int16_t)mecha_y;
+    result.z = (int16_t)mecha_z;
+    result.valid = 1;
+  #endif
+
+  #ifdef FEATURE_AZ_POSITION_POLOLU_LSM303
+    compass.read();
+    result.x = compass.m.x;
+    result.y = compass.m.y;
+    result.z = compass.m.z;
+    result.valid = !compass.timeoutOccurred();
+  #endif
+
+  #ifdef FEATURE_AZ_POSITION_ADAFRUIT_LSM303
+    lsm.read();
+    result.x = (int16_t)lsm.magData.x;
+    result.y = (int16_t)lsm.magData.y;
+    result.z = (int16_t)lsm.magData.z;
+    result.valid = 1;
+  #endif
+
+  // Apply calibration if valid
+  if (result.valid && configuration.magnetometer_calibration_valid) {
+    int16_t x_offset = (configuration.magnetometer_x_max + configuration.magnetometer_x_min) / 2;
+    int16_t y_offset = (configuration.magnetometer_y_max + configuration.magnetometer_y_min) / 2;
+    int16_t z_offset = (configuration.magnetometer_z_max + configuration.magnetometer_z_min) / 2;
+
+    result.x -= x_offset;
+    result.y -= y_offset;
+    result.z -= z_offset;
+  }
+
+  return result;
+}
+
+void apply_magnetometer_calibration_to_compass_object() {
+  // For sensors that accept calibration in their library (e.g., Pololu LSM303)
+  #ifdef FEATURE_AZ_POSITION_POLOLU_LSM303
+    if (configuration.magnetometer_calibration_valid) {
+      compass.m_min.x = configuration.magnetometer_x_min;
+      compass.m_min.y = configuration.magnetometer_y_min;
+      compass.m_min.z = configuration.magnetometer_z_min;
+      compass.m_max.x = configuration.magnetometer_x_max;
+      compass.m_max.y = configuration.magnetometer_y_max;
+      compass.m_max.z = configuration.magnetometer_z_max;
+    } else {
+      // Use defaults from rotator_settings.h if no EEPROM calibration
+      compass.m_min = (LSM303::vector<int16_t>) POLOLU_LSM_303_MIN_ARRAY;
+      compass.m_max = (LSM303::vector<int16_t>) POLOLU_LSM_303_MAX_ARRAY;
+    }
+  #endif
+
+  #ifdef FEATURE_AZ_POSITION_ADAFRUIT_LSM303
+    if (configuration.magnetometer_calibration_valid) {
+      // Adafruit library may not support direct min/max setting
+      // Calibration will be applied in read_magnetometer_raw() instead
+    }
+  #endif
+}
+
+#endif // magnetometer sensor types
+// ============================== END MAGNETOMETER ABSTRACTION ==============================
+
+// --------------------------------------------------------------
 #if !defined(FEATURE_CALIBRATION)
 void apply_azimuth_offset(){
 
@@ -8209,9 +8611,15 @@ void read_azimuth(byte force_read){
       #ifdef FEATURE_AZIMUTH_CORRECTION
         raw_azimuth = correct_azimuth(raw_azimuth);
       #endif // FEATURE_AZIMUTH_CORRECTION
-  
-      #if !defined(FEATURE_CALIBRATION)
-      apply_azimuth_offset();
+
+      #if defined(FEATURE_CALIBRATION)
+        raw_azimuth = interpolate_calibration_table(raw_azimuth,
+                                                     configuration.calibration_az_from,
+                                                     configuration.calibration_az_to,
+                                                     configuration.calibration_az_flag,
+                                                     CALIBRATION_POINTS);
+      #else
+        apply_azimuth_offset();
       #endif
 
       if (AZIMUTH_SMOOTHING_FACTOR > 0) {
@@ -8250,8 +8658,14 @@ void read_azimuth(byte force_read){
             raw_azimuth = correct_azimuth(raw_azimuth);
           #endif // FEATURE_AZIMUTH_CORRECTION
 
-          #if !defined(FEATURE_CALIBRATION)          
-          apply_azimuth_offset();
+          #if defined(FEATURE_CALIBRATION)
+            raw_azimuth = interpolate_calibration_table(raw_azimuth,
+                                                         configuration.calibration_az_from,
+                                                         configuration.calibration_az_to,
+                                                         configuration.calibration_az_flag,
+                                                         CALIBRATION_POINTS);
+          #else
+            apply_azimuth_offset();
           #endif
 
           if (AZIMUTH_SMOOTHING_FACTOR > 0) {
@@ -8400,8 +8814,14 @@ void read_azimuth(byte force_read){
       #ifdef FEATURE_AZIMUTH_CORRECTION
         raw_azimuth = correct_azimuth(raw_azimuth);
       #endif // FEATURE_AZIMUTH_CORRECTION
-      #if !defined(FEATURE_CALIBRATION)  
-      apply_azimuth_offset();
+      #if defined(FEATURE_CALIBRATION)
+        raw_azimuth = interpolate_calibration_table(raw_azimuth,
+                                                     configuration.calibration_az_from,
+                                                     configuration.calibration_az_to,
+                                                     configuration.calibration_az_flag,
+                                                     CALIBRATION_POINTS);
+      #else
+        apply_azimuth_offset();
       #endif
       azimuth = raw_azimuth;
     #endif // FEATURE_AZ_POSITION_HMC5883L
@@ -8447,8 +8867,14 @@ void read_azimuth(byte force_read){
       #ifdef FEATURE_AZIMUTH_CORRECTION
         raw_azimuth = correct_azimuth(raw_azimuth);
       #endif // FEATURE_AZIMUTH_CORRECTION
-      #if !defined(FEATURE_CALIBRATION)  
-      apply_azimuth_offset();
+      #if defined(FEATURE_CALIBRATION)
+        raw_azimuth = interpolate_calibration_table(raw_azimuth,
+                                                     configuration.calibration_az_from,
+                                                     configuration.calibration_az_to,
+                                                     configuration.calibration_az_flag,
+                                                     CALIBRATION_POINTS);
+      #else
+        apply_azimuth_offset();
       #endif
       azimuth = raw_azimuth;
     #endif // FEATURE_AZ_POSITION_HMC5883L_USING_JARZEBSKI_LIBRARY
@@ -8495,8 +8921,14 @@ void read_azimuth(byte force_read){
       #ifdef FEATURE_AZIMUTH_CORRECTION
         raw_azimuth = correct_azimuth(raw_azimuth);
       #endif // FEATURE_AZIMUTH_CORRECTION
-      #if !defined(FEATURE_CALIBRATION)  
-      apply_azimuth_offset();
+      #if defined(FEATURE_CALIBRATION)
+        raw_azimuth = interpolate_calibration_table(raw_azimuth,
+                                                     configuration.calibration_az_from,
+                                                     configuration.calibration_az_to,
+                                                     configuration.calibration_az_flag,
+                                                     CALIBRATION_POINTS);
+      #else
+        apply_azimuth_offset();
       #endif
       azimuth = raw_azimuth;
     #endif //FEATURE_AZ_POSITION_DFROBOT_QMC5883
@@ -8536,8 +8968,14 @@ void read_azimuth(byte force_read){
       #ifdef FEATURE_AZIMUTH_CORRECTION
         raw_azimuth = correct_azimuth(raw_azimuth);
       #endif // FEATURE_AZIMUTH_CORRECTION
-      #if !defined(FEATURE_CALIBRATION)  
-      apply_azimuth_offset();
+      #if defined(FEATURE_CALIBRATION)
+        raw_azimuth = interpolate_calibration_table(raw_azimuth,
+                                                     configuration.calibration_az_from,
+                                                     configuration.calibration_az_to,
+                                                     configuration.calibration_az_flag,
+                                                     CALIBRATION_POINTS);
+      #else
+        apply_azimuth_offset();
       #endif
       azimuth = raw_azimuth;
     #endif //FEATURE_AZ_POSITION_MECHASOLUTION_QMC5883
@@ -8555,8 +8993,14 @@ void read_azimuth(byte force_read){
       #ifdef FEATURE_AZIMUTH_CORRECTION
         raw_azimuth = correct_azimuth(raw_azimuth);
       #endif // FEATURE_AZIMUTH_CORRECTION
-      #if !defined(FEATURE_CALIBRATION)  
-      apply_azimuth_offset();
+      #if defined(FEATURE_CALIBRATION)
+        raw_azimuth = interpolate_calibration_table(raw_azimuth,
+                                                     configuration.calibration_az_from,
+                                                     configuration.calibration_az_to,
+                                                     configuration.calibration_az_flag,
+                                                     CALIBRATION_POINTS);
+      #else
+        apply_azimuth_offset();
       #endif
       if (AZIMUTH_SMOOTHING_FACTOR > 0) {
         if (raw_azimuth < 0){raw_azimuth = 0;}
@@ -8614,8 +9058,14 @@ void read_azimuth(byte force_read){
       #ifdef FEATURE_AZIMUTH_CORRECTION
         raw_azimuth = correct_azimuth(raw_azimuth);
       #endif // FEATURE_AZIMUTH_CORRECTION
-      #if !defined(FEATURE_CALIBRATION)  
-      apply_azimuth_offset();
+      #if defined(FEATURE_CALIBRATION)
+        raw_azimuth = interpolate_calibration_table(raw_azimuth,
+                                                     configuration.calibration_az_from,
+                                                     configuration.calibration_az_to,
+                                                     configuration.calibration_az_flag,
+                                                     CALIBRATION_POINTS);
+      #else
+        apply_azimuth_offset();
       #endif
       if (AZIMUTH_SMOOTHING_FACTOR > 0) {
         if (raw_azimuth < 0){raw_azimuth = 0;}
@@ -8676,8 +9126,14 @@ void read_azimuth(byte force_read){
       #ifdef FEATURE_AZIMUTH_CORRECTION
         raw_azimuth = correct_azimuth(raw_azimuth);
       #endif // FEATURE_AZIMUTH_CORRECTION
-      #if !defined(FEATURE_CALIBRATION)  
-      apply_azimuth_offset();
+      #if defined(FEATURE_CALIBRATION)
+        raw_azimuth = interpolate_calibration_table(raw_azimuth,
+                                                     configuration.calibration_az_from,
+                                                     configuration.calibration_az_to,
+                                                     configuration.calibration_az_flag,
+                                                     CALIBRATION_POINTS);
+      #else
+        apply_azimuth_offset();
       #endif
       convert_raw_azimuth_to_real_azimuth();
     #endif // FEATURE_AZ_POSITION_HH12_AS5045_SSI
@@ -8793,8 +9249,14 @@ void read_azimuth(byte force_read){
       #ifdef FEATURE_AZIMUTH_CORRECTION
         raw_azimuth = (correct_azimuth(raw_azimuth));
       #endif // FEATURE_AZIMUTH_CORRECTION
-      #if !defined(FEATURE_CALIBRATION)  
-      apply_azimuth_offset();
+      #if defined(FEATURE_CALIBRATION)
+        raw_azimuth = interpolate_calibration_table(raw_azimuth,
+                                                     configuration.calibration_az_from,
+                                                     configuration.calibration_az_to,
+                                                     configuration.calibration_az_flag,
+                                                     CALIBRATION_POINTS);
+      #else
+        apply_azimuth_offset();
       #endif
       convert_raw_azimuth_to_real_azimuth();
       if (raw_azimuth != incremental_encoder_previous_raw_azimuth) {
@@ -8813,8 +9275,14 @@ void read_azimuth(byte force_read){
     #ifdef FEATURE_AZIMUTH_CORRECTION
       raw_azimuth = (correct_azimuth(raw_azimuth));
     #endif // FEATURE_AZIMUTH_CORRECTION
-    #if !defined(FEATURE_CALIBRATION)  
-    apply_azimuth_offset();
+    #if defined(FEATURE_CALIBRATION)
+      raw_azimuth = interpolate_calibration_table(raw_azimuth,
+                                                   configuration.calibration_az_from,
+                                                   configuration.calibration_az_to,
+                                                   configuration.calibration_az_flag,
+                                                   CALIBRATION_POINTS);
+    #else
+      apply_azimuth_offset();
     #endif
     azimuth = raw_azimuth;
   #endif //FEATURE_AZ_POSITION_A2_ABSOLUTE_ENCODER  
@@ -9576,6 +10044,54 @@ void print_help(byte port){
     print_to_port("Z Toggle north / south centered mode\n",port);
   #endif // defined(OPTION_SERIAL_HELP_TEXT) && defined(FEATURE_YAESU_EMULATION)
 
+  // Calibration commands help (backslash commands)
+  #ifdef OPTION_SERIAL_HELP_TEXT
+    print_to_port("\n",port);
+    print_to_port("Calibration Commands (use \\ prefix):\n",port);
+
+    // Magnetometer calibration
+    #if defined(FEATURE_AZ_POSITION_HMC5883L) || defined(FEATURE_AZ_POSITION_HMC5883L_USING_JARZEBSKI_LIBRARY) || \
+        defined(FEATURE_AZ_POSITION_DFROBOT_QMC5883) || defined(FEATURE_AZ_POSITION_MECHASOLUTION_QMC5883) || \
+        defined(FEATURE_AZ_POSITION_POLOLU_LSM303) || defined(FEATURE_AZ_POSITION_ADAFRUIT_LSM303)
+      print_to_port("\\XMG - Automatic magnetometer calibration (360 rotation)\n",port);
+      print_to_port("\\XMGs - Start manual magnetometer calibration\n",port);
+      print_to_port("\\XMGe - End manual magnetometer calibration\n",port);
+    #endif
+
+    // Multi-point calibration
+    #ifdef FEATURE_CALIBRATION
+      print_to_port("\\X - Display calibration tables\n",port);
+      print_to_port("\\XAA[from],[to] - Add azimuth calibration point\n",port);
+      #ifdef FEATURE_ELEVATION_CONTROL
+        print_to_port("\\XAE[from],[to] - Add elevation calibration point\n",port);
+      #endif
+      print_to_port("\\XRA[index] - Remove azimuth calibration point\n",port);
+      #ifdef FEATURE_ELEVATION_CONTROL
+        print_to_port("\\XRE[index] - Remove elevation calibration point\n",port);
+      #endif
+      print_to_port("\\XCA - Clear azimuth calibration table\n",port);
+      #ifdef FEATURE_ELEVATION_CONTROL
+        print_to_port("\\XCE - Clear elevation calibration table\n",port);
+      #endif
+      print_to_port("\\X0 - Clear all calibration tables\n",port);
+      #ifdef FEATURE_SUN_TRACKING
+        print_to_port("\\XS - Add calibration point using sun position\n",port);
+      #endif
+      #ifdef FEATURE_MOON_TRACKING
+        print_to_port("\\XM - Add calibration point using moon position\n",port);
+      #endif
+    #endif
+
+    // Status queries
+    #if defined(FEATURE_AZ_POSITION_HMC5883L) || defined(FEATURE_AZ_POSITION_HMC5883L_USING_JARZEBSKI_LIBRARY) || \
+        defined(FEATURE_AZ_POSITION_DFROBOT_QMC5883) || defined(FEATURE_AZ_POSITION_MECHASOLUTION_QMC5883) || \
+        defined(FEATURE_AZ_POSITION_POLOLU_LSM303) || defined(FEATURE_AZ_POSITION_ADAFRUIT_LSM303) || \
+        defined(FEATURE_CALIBRATION)
+      print_to_port("\\?CAL - Display comprehensive calibration status\n",port);
+    #endif
+
+    print_to_port("\n",port);
+  #endif // OPTION_SERIAL_HELP_TEXT
 
 } /* print_help */
 
@@ -13204,6 +13720,33 @@ void check_limit_sense(){
         #ifdef DEBUG_LIMIT_SENSE
           debug.print(F("check_limit_sense: az limit tripped\n"));
         #endif // DEBUG_LIMIT_SENSE
+
+        // Check if automatic magnetometer calibration is in progress
+        #if defined(FEATURE_AZ_POSITION_HMC5883L) || defined(FEATURE_AZ_POSITION_HMC5883L_USING_JARZEBSKI_LIBRARY) || \
+            defined(FEATURE_AZ_POSITION_DFROBOT_QMC5883) || defined(FEATURE_AZ_POSITION_MECHASOLUTION_QMC5883) || \
+            defined(FEATURE_AZ_POSITION_POLOLU_LSM303) || defined(FEATURE_AZ_POSITION_ADAFRUIT_LSM303)
+          if (magnetometer_calibration_in_progress) {
+            mag_cal_state = MAG_CAL_ERROR_LIMIT_HIT;
+            #ifdef FEATURE_SERIAL
+              control_port->print(F("Auto mag cal: LIMIT HIT after "));
+              control_port->print(degrees_rotated, 0);
+              control_port->print(F("° ("));
+              control_port->print(auto_sample_count);
+              control_port->println(F(" samples)"));
+            #endif
+            // Check if we got enough data for partial calibration
+            if (degrees_rotated >= 180 && auto_sample_count >= 50) {
+              #ifdef FEATURE_SERIAL
+                control_port->println(F("Attempting to save partial calibration..."));
+              #endif
+              // The state machine will handle partial save
+            } else {
+              #ifdef FEATURE_SERIAL
+                control_port->println(F("Insufficient data for calibration."));
+              #endif
+            }
+          }
+        #endif
       }
     } else {
       az_limit_tripped = 0;
@@ -13890,6 +14433,541 @@ byte calibrate_az_el(float new_az, float new_el){
 
 } /* calibrate_az_el */
 #endif // defined(FEATURE_MOON_TRACKING) || defined(FEATURE_SUN_TRACKING)
+// --------------------------------------------------------------
+
+// ============================== MAGNETOMETER CALIBRATION ==============================
+#if defined(FEATURE_AZ_POSITION_HMC5883L) || defined(FEATURE_AZ_POSITION_HMC5883L_USING_JARZEBSKI_LIBRARY) || \
+    defined(FEATURE_AZ_POSITION_DFROBOT_QMC5883) || defined(FEATURE_AZ_POSITION_MECHASOLUTION_QMC5883) || \
+    defined(FEATURE_AZ_POSITION_POLOLU_LSM303) || defined(FEATURE_AZ_POSITION_ADAFRUIT_LSM303)
+
+// Global variables for manual calibration
+static byte manual_mag_cal_active = 0;
+static unsigned long manual_cal_start_time = 0;
+static int16_t manual_x_min = 32767;
+static int16_t manual_y_min = 32767;
+static int16_t manual_z_min = 32767;
+static int16_t manual_x_max = -32768;
+static int16_t manual_y_max = -32768;
+static int16_t manual_z_max = -32768;
+static unsigned int manual_sample_count = 0;
+static unsigned long last_manual_cal_status_time = 0;
+
+// Global variables for automatic calibration
+byte magnetometer_calibration_in_progress = 0;
+static byte mag_cal_state = MAG_CAL_IDLE;
+static float calibration_start_position = 0;
+static float calibration_target_position = 0;
+static unsigned long calibration_start_time = 0;
+static int16_t auto_x_min = 32767;
+static int16_t auto_y_min = 32767;
+static int16_t auto_z_min = 32767;
+static int16_t auto_x_max = -32768;
+static int16_t auto_y_max = -32768;
+static int16_t auto_z_max = -32768;
+static unsigned int auto_sample_count = 0;
+static float degrees_rotated = 0;
+static unsigned long last_auto_cal_status_time = 0;
+
+byte assess_calibration_quality() {
+  // Check that each axis has reasonable range
+  int16_t x_range = configuration.magnetometer_x_max - configuration.magnetometer_x_min;
+  int16_t y_range = configuration.magnetometer_y_max - configuration.magnetometer_y_min;
+
+  // Minimum range thresholds depend on sensor type
+  int16_t MIN_RANGE = 200;  // Conservative default
+
+  #ifdef FEATURE_AZ_POSITION_POLOLU_LSM303
+    MIN_RANGE = 400;  // LSM303 typical range ~800-1000
+  #endif
+
+  #if defined(FEATURE_AZ_POSITION_HMC5883L) || defined(FEATURE_AZ_POSITION_HMC5883L_USING_JARZEBSKI_LIBRARY)
+    MIN_RANGE = 300;  // HMC5883L typical range
+  #endif
+
+  #if defined(FEATURE_AZ_POSITION_DFROBOT_QMC5883) || defined(FEATURE_AZ_POSITION_MECHASOLUTION_QMC5883)
+    MIN_RANGE = 500;  // QMC5883 has higher range
+  #endif
+
+  if (x_range < MIN_RANGE || y_range < MIN_RANGE) {
+    return CALIBRATION_QUALITY_POOR;
+  }
+
+  // Check symmetry (hard iron should be roughly centered)
+  int16_t x_center = (configuration.magnetometer_x_max + configuration.magnetometer_x_min) / 2;
+  int16_t y_center = (configuration.magnetometer_y_max + configuration.magnetometer_y_min) / 2;
+
+  // Extreme offsets indicate magnetic interference or poor calibration
+  if (abs(x_center) > 5000 || abs(y_center) > 5000) {
+    return CALIBRATION_QUALITY_SUSPECT;
+  }
+
+  return CALIBRATION_QUALITY_GOOD;
+}
+
+byte calibrate_magnetometer_manual(byte mode) {
+  // mode: 0 = start, 1 = update, 2 = stop/save
+
+  switch(mode) {
+    case 0:  // START
+      // Initialize tracking variables
+      manual_x_min = 32767;
+      manual_y_min = 32767;
+      manual_z_min = 32767;
+      manual_x_max = -32768;
+      manual_y_max = -32768;
+      manual_z_max = -32768;
+      manual_sample_count = 0;
+      manual_cal_start_time = millis();
+      manual_mag_cal_active = 1;
+      last_manual_cal_status_time = millis();
+
+      #ifdef DEBUG_CALIBRATION
+        debug.println(F("calibrate_magnetometer_manual: Started"));
+      #endif
+
+      return CALIBRATION_IN_PROGRESS;
+
+    case 1:  // UPDATE (call this from main loop)
+      if (!manual_mag_cal_active) {
+        return CALIBRATION_SUCCESS;  // Not active
+      }
+
+      // Read sensor and update min/max
+      MagnetometerReading reading = read_magnetometer_raw();
+
+      if (reading.valid) {
+        // Temporarily disable calibration to get raw values
+        byte temp_cal_valid = configuration.magnetometer_calibration_valid;
+        configuration.magnetometer_calibration_valid = 0;
+        reading = read_magnetometer_raw();
+        configuration.magnetometer_calibration_valid = temp_cal_valid;
+
+        // Update min/max tracking
+        if (reading.x < manual_x_min) manual_x_min = reading.x;
+        if (reading.x > manual_x_max) manual_x_max = reading.x;
+        if (reading.y < manual_y_min) manual_y_min = reading.y;
+        if (reading.y > manual_y_max) manual_y_max = reading.y;
+        if (reading.z < manual_z_min) manual_z_min = reading.z;
+        if (reading.z > manual_z_max) manual_z_max = reading.z;
+
+        manual_sample_count++;
+
+        // Print progress every second
+        #ifdef FEATURE_SERIAL
+          if ((millis() - last_manual_cal_status_time) > 1000) {
+            control_port->print(F("Cal: "));
+            control_port->print(manual_sample_count);
+            control_port->print(F(" samples, Range X:"));
+            control_port->print(manual_x_max - manual_x_min);
+            control_port->print(F(" Y:"));
+            control_port->print(manual_y_max - manual_y_min);
+            control_port->print(F(" Z:"));
+            control_port->println(manual_z_max - manual_z_min);
+            last_manual_cal_status_time = millis();
+          }
+        #endif
+      }
+
+      return CALIBRATION_IN_PROGRESS;
+
+    case 2:  // STOP/SAVE
+      manual_mag_cal_active = 0;
+
+      // Validate data quality
+      if (manual_sample_count < 100) {
+        #ifdef DEBUG_CALIBRATION
+          debug.print(F("calibrate_magnetometer_manual: Insufficient samples: "));
+          debug.println(manual_sample_count);
+        #endif
+        return CALIBRATION_ERROR_INSUFFICIENT_DATA;
+      }
+
+      // Check min/max validity
+      if (manual_x_min >= manual_x_max || manual_y_min >= manual_y_max) {
+        #ifdef DEBUG_CALIBRATION
+          debug.println(F("calibrate_magnetometer_manual: Invalid min/max values"));
+        #endif
+        return CALIBRATION_ERROR_INVALID_DATA;
+      }
+
+      // Calculate offsets and save to EEPROM
+      configuration.magnetometer_x_min = manual_x_min;
+      configuration.magnetometer_y_min = manual_y_min;
+      configuration.magnetometer_z_min = manual_z_min;
+      configuration.magnetometer_x_max = manual_x_max;
+      configuration.magnetometer_y_max = manual_y_max;
+      configuration.magnetometer_z_max = manual_z_max;
+      configuration.magnetometer_calibration_valid = 1;
+      configuration_dirty = 1;
+
+      // Apply calibration to compass object
+      apply_magnetometer_calibration_to_compass_object();
+
+      #ifdef DEBUG_CALIBRATION
+        debug.println(F("calibrate_magnetometer_manual: Saved"));
+        debug.print(F("  X: "));
+        debug.print(manual_x_min);
+        debug.print(F(" to "));
+        debug.println(manual_x_max);
+        debug.print(F("  Y: "));
+        debug.print(manual_y_min);
+        debug.print(F(" to "));
+        debug.println(manual_y_max);
+        debug.print(F("  Z: "));
+        debug.print(manual_z_min);
+        debug.print(F(" to "));
+        debug.println(manual_z_max);
+      #endif
+
+      return CALIBRATION_SUCCESS;
+  }
+
+  return CALIBRATION_ERROR_INVALID_DATA;
+}
+
+byte validate_calibration_preconditions() {
+  // Check 1: Sensor present and responding
+  #ifdef FEATURE_AZ_POSITION_POLOLU_LSM303
+    compass.read();
+    if (compass.timeoutOccurred()) {
+      #ifdef DEBUG_CALIBRATION
+        debug.println(F("validate_calibration_preconditions: No sensor response"));
+      #endif
+      return CALIBRATION_ERROR_NO_SENSOR;
+    }
+  #endif
+
+  // Check 2: Not already rotating
+  if (az_state != IDLE) {
+    #ifdef DEBUG_CALIBRATION
+      debug.println(F("validate_calibration_preconditions: Already rotating"));
+    #endif
+    return CALIBRATION_ERROR_BUSY;
+  }
+
+  // Check 3: Sufficient rotation capability (need at least 270 degrees for good calibration)
+  if (configuration.azimuth_rotation_capability < 270) {
+    #ifdef DEBUG_CALIBRATION
+      debug.print(F("validate_calibration_preconditions: Insufficient range: "));
+      debug.println(configuration.azimuth_rotation_capability);
+    #endif
+    return CALIBRATION_ERROR_INSUFFICIENT_RANGE;
+  }
+
+  // Check 4: Limit switches not currently triggered
+  #ifdef FEATURE_LIMIT_SENSE
+    if (az_limit_sense_pin && digitalReadEnhanced(az_limit_sense_pin) == 0) {
+      #ifdef DEBUG_CALIBRATION
+        debug.println(F("validate_calibration_preconditions: Limit switch already triggered"));
+      #endif
+      return CALIBRATION_ERROR_LIMIT_ALREADY_HIT;
+    }
+  #endif
+
+  return CALIBRATION_SUCCESS;
+}
+
+byte start_magnetometer_calibration_automatic() {
+  // Validate preconditions
+  byte result = validate_calibration_preconditions();
+  if (result != CALIBRATION_SUCCESS) {
+    return result;
+  }
+
+  // Initialize calibration variables
+  auto_x_min = 32767;
+  auto_y_min = 32767;
+  auto_z_min = 32767;
+  auto_x_max = -32768;
+  auto_y_max = -32768;
+  auto_z_max = -32768;
+  auto_sample_count = 0;
+  degrees_rotated = 0;
+
+  // Record starting position
+  read_azimuth(1);
+  calibration_start_position = raw_azimuth;
+  calibration_start_time = millis();
+  last_auto_cal_status_time = millis();
+
+  // Calculate target position for 360-degree rotation (or max available)
+  float rotation_range = min(360.0, (float)configuration.azimuth_rotation_capability);
+  calibration_target_position = calibration_start_position + rotation_range;
+
+  // Ensure target doesn't exceed rotation capability
+  float max_position = configuration.azimuth_starting_point + configuration.azimuth_rotation_capability;
+  if (calibration_target_position > max_position) {
+    calibration_target_position = max_position;
+  }
+
+  // Set state machine to INIT
+  mag_cal_state = MAG_CAL_INIT;
+  magnetometer_calibration_in_progress = 1;
+
+  #ifdef DEBUG_CALIBRATION
+    debug.print(F("start_magnetometer_calibration_automatic: Start="));
+    debug.print(calibration_start_position);
+    debug.print(F(" Target="));
+    debug.print(calibration_target_position);
+    debug.print(F(" Range="));
+    debug.println(rotation_range);
+  #endif
+
+  return CALIBRATION_IN_PROGRESS;
+}
+
+void service_magnetometer_calibration() {
+  if (!magnetometer_calibration_in_progress) {
+    return;  // Not active
+  }
+
+  switch(mag_cal_state) {
+    case MAG_CAL_IDLE:
+      // Should not reach here if calibration_in_progress is set
+      magnetometer_calibration_in_progress = 0;
+      break;
+
+    case MAG_CAL_INIT:
+      #ifdef DEBUG_CALIBRATION
+        debug.println(F("service_magnetometer_calibration: MAG_CAL_INIT"));
+      #endif
+
+      // Submit rotation request
+      submit_request(AZ, REQUEST_AZIMUTH_RAW, calibration_target_position, 200);
+
+      // Move to ROTATING state
+      mag_cal_state = MAG_CAL_ROTATING;
+
+      #ifdef FEATURE_SERIAL
+        control_port->println(F("Auto mag cal: Rotating..."));
+      #endif
+      break;
+
+    case MAG_CAL_ROTATING:
+      // Continuously read magnetometer and track min/max
+      MagnetometerReading reading = read_magnetometer_raw();
+
+      if (reading.valid) {
+        // Temporarily disable calibration to get raw values
+        byte temp_cal_valid = configuration.magnetometer_calibration_valid;
+        configuration.magnetometer_calibration_valid = 0;
+        reading = read_magnetometer_raw();
+        configuration.magnetometer_calibration_valid = temp_cal_valid;
+
+        // Update min/max tracking
+        if (reading.x < auto_x_min) auto_x_min = reading.x;
+        if (reading.x > auto_x_max) auto_x_max = reading.x;
+        if (reading.y < auto_y_min) auto_y_min = reading.y;
+        if (reading.y > auto_y_max) auto_y_max = reading.y;
+        if (reading.z < auto_z_min) auto_z_min = reading.z;
+        if (reading.z > auto_z_max) auto_z_max = reading.z;
+
+        auto_sample_count++;
+      }
+
+      // Calculate degrees rotated
+      read_azimuth(1);
+      degrees_rotated = abs(raw_azimuth - calibration_start_position);
+
+      // Print progress every 2 seconds
+      #ifdef FEATURE_SERIAL
+        if ((millis() - last_auto_cal_status_time) > 2000) {
+          float target_rotation = abs(calibration_target_position - calibration_start_position);
+          byte percent = (degrees_rotated / target_rotation) * 100;
+          if (percent > 100) percent = 100;
+
+          control_port->print(F("Cal: "));
+          control_port->print(percent);
+          control_port->print(F("% ("));
+          control_port->print(degrees_rotated, 0);
+          control_port->print(F("° of "));
+          control_port->print(target_rotation, 0);
+          control_port->print(F("°), "));
+          control_port->print(auto_sample_count);
+          control_port->println(F(" samples"));
+          last_auto_cal_status_time = millis();
+        }
+      #endif
+
+      // Check if rotation is complete
+      if (az_state == IDLE) {
+        #ifdef DEBUG_CALIBRATION
+          debug.print(F("service_magnetometer_calibration: Rotation complete. Degrees: "));
+          debug.print(degrees_rotated);
+          debug.print(F(" Samples: "));
+          debug.println(auto_sample_count);
+        #endif
+        mag_cal_state = MAG_CAL_SAVING;
+      }
+
+      // Check for timeout (5 minutes)
+      if ((millis() - calibration_start_time) > 300000) {
+        #ifdef DEBUG_CALIBRATION
+          debug.println(F("service_magnetometer_calibration: Timeout"));
+        #endif
+        mag_cal_state = MAG_CAL_ERROR;
+        #ifdef FEATURE_SERIAL
+          control_port->println(F("Auto mag cal: TIMEOUT"));
+        #endif
+      }
+      break;
+
+    case MAG_CAL_SAVING:
+      #ifdef DEBUG_CALIBRATION
+        debug.println(F("service_magnetometer_calibration: MAG_CAL_SAVING"));
+      #endif
+
+      // Validate we got enough rotation
+      if (degrees_rotated < 180) {
+        #ifdef DEBUG_CALIBRATION
+          debug.print(F("service_magnetometer_calibration: Insufficient rotation: "));
+          debug.println(degrees_rotated);
+        #endif
+        mag_cal_state = MAG_CAL_ERROR;
+        #ifdef FEATURE_SERIAL
+          control_port->print(F("Auto mag cal: FAILED - Only rotated "));
+          control_port->print(degrees_rotated, 0);
+          control_port->println(F("° (need ≥180°)"));
+        #endif
+        break;
+      }
+
+      // Validate we got enough samples
+      if (auto_sample_count < 50) {
+        #ifdef DEBUG_CALIBRATION
+          debug.print(F("service_magnetometer_calibration: Insufficient samples: "));
+          debug.println(auto_sample_count);
+        #endif
+        mag_cal_state = MAG_CAL_ERROR;
+        #ifdef FEATURE_SERIAL
+          control_port->println(F("Auto mag cal: FAILED - Insufficient data"));
+        #endif
+        break;
+      }
+
+      // Check min/max validity
+      if (auto_x_min >= auto_x_max || auto_y_min >= auto_y_max) {
+        #ifdef DEBUG_CALIBRATION
+          debug.println(F("service_magnetometer_calibration: Invalid min/max"));
+        #endif
+        mag_cal_state = MAG_CAL_ERROR;
+        #ifdef FEATURE_SERIAL
+          control_port->println(F("Auto mag cal: FAILED - Invalid data"));
+        #endif
+        break;
+      }
+
+      // Save calibration to EEPROM
+      configuration.magnetometer_x_min = auto_x_min;
+      configuration.magnetometer_y_min = auto_y_min;
+      configuration.magnetometer_z_min = auto_z_min;
+      configuration.magnetometer_x_max = auto_x_max;
+      configuration.magnetometer_y_max = auto_y_max;
+      configuration.magnetometer_z_max = auto_z_max;
+      configuration.magnetometer_calibration_valid = 1;
+      configuration_dirty = 1;
+
+      // Apply calibration to compass object
+      apply_magnetometer_calibration_to_compass_object();
+
+      // Assess quality
+      byte quality = assess_calibration_quality();
+
+      #ifdef DEBUG_CALIBRATION
+        debug.println(F("service_magnetometer_calibration: Calibration saved"));
+        debug.print(F("  X: "));
+        debug.print(auto_x_min);
+        debug.print(F(" to "));
+        debug.println(auto_x_max);
+        debug.print(F("  Y: "));
+        debug.print(auto_y_min);
+        debug.print(F(" to "));
+        debug.println(auto_y_max);
+        debug.print(F("  Degrees rotated: "));
+        debug.println(degrees_rotated);
+      #endif
+
+      #ifdef FEATURE_SERIAL
+        control_port->print(F("Auto mag cal: SUCCESS ("));
+        control_port->print(degrees_rotated, 0);
+        control_port->print(F("°, "));
+        control_port->print(auto_sample_count);
+        control_port->print(F(" samples) Quality: "));
+        if (quality == CALIBRATION_QUALITY_GOOD) {
+          control_port->println(F("GOOD"));
+        } else if (quality == CALIBRATION_QUALITY_POOR) {
+          control_port->println(F("POOR"));
+        } else {
+          control_port->println(F("SUSPECT"));
+        }
+      #endif
+
+      // Mark rotation as partial success if <270 degrees but >=180 degrees
+      if (degrees_rotated < 270) {
+        mag_cal_state = MAG_CAL_COMPLETE;  // Still mark as complete, but note it was partial
+      } else {
+        mag_cal_state = MAG_CAL_COMPLETE;
+      }
+      break;
+
+    case MAG_CAL_ERROR_LIMIT_HIT:
+      // Limit switch was hit during calibration
+      // Try to save partial calibration if we have enough data
+      if (degrees_rotated >= 180 && auto_sample_count >= 50 &&
+          auto_x_min < auto_x_max && auto_y_min < auto_y_max) {
+
+        // Save partial calibration
+        configuration.magnetometer_x_min = auto_x_min;
+        configuration.magnetometer_y_min = auto_y_min;
+        configuration.magnetometer_z_min = auto_z_min;
+        configuration.magnetometer_x_max = auto_x_max;
+        configuration.magnetometer_y_max = auto_y_max;
+        configuration.magnetometer_z_max = auto_z_max;
+        configuration.magnetometer_calibration_valid = 1;
+        configuration_dirty = 1;
+
+        apply_magnetometer_calibration_to_compass_object();
+
+        byte quality = assess_calibration_quality();
+
+        #ifdef FEATURE_SERIAL
+          control_port->print(F("Partial cal saved ("));
+          control_port->print(degrees_rotated, 0);
+          control_port->print(F("°) Quality: "));
+          if (quality == CALIBRATION_QUALITY_GOOD) {
+            control_port->println(F("GOOD"));
+          } else if (quality == CALIBRATION_QUALITY_POOR) {
+            control_port->println(F("POOR - recommend full 360° cal"));
+          } else {
+            control_port->println(F("SUSPECT"));
+          }
+        #endif
+
+        #ifdef DEBUG_CALIBRATION
+          debug.println(F("service_magnetometer_calibration: Partial calibration saved after limit hit"));
+        #endif
+      }
+
+      magnetometer_calibration_in_progress = 0;
+      mag_cal_state = MAG_CAL_IDLE;
+      break;
+
+    case MAG_CAL_COMPLETE:
+    case MAG_CAL_ERROR:
+      // Calibration finished (success or error)
+      magnetometer_calibration_in_progress = 0;
+      mag_cal_state = MAG_CAL_IDLE;
+
+      #ifdef DEBUG_CALIBRATION
+        debug.println(F("service_magnetometer_calibration: Calibration ended"));
+      #endif
+      break;
+  }
+}
+
+#endif // magnetometer sensor types
+// ============================== END MAGNETOMETER CALIBRATION ==============================
+
 // --------------------------------------------------------------
 
 #if defined(FEATURE_MOON_TRACKING) || defined(FEATURE_SUN_TRACKING)
@@ -15270,14 +16348,83 @@ byte process_backslash_command(byte input_buffer[], int input_buffer_index, byte
         #endif // FEATURE_SUN_TRACKING
         #if defined(FEATURE_MOON_TRACKING)
         case 'M':
-          update_moon_position();
-          if (calibrate_az_el(moon_azimuth, moon_elevation)) {
-            strcpy(return_string, az_el_calibrated_string());
-          } else {
-            strcpy_P(return_string, (const char*) F("Error."));
+          #if defined(FEATURE_AZ_POSITION_HMC5883L) || defined(FEATURE_AZ_POSITION_HMC5883L_USING_JARZEBSKI_LIBRARY) || \
+              defined(FEATURE_AZ_POSITION_DFROBOT_QMC5883) || defined(FEATURE_AZ_POSITION_MECHASOLUTION_QMC5883) || \
+              defined(FEATURE_AZ_POSITION_POLOLU_LSM303) || defined(FEATURE_AZ_POSITION_ADAFRUIT_LSM303)
+            // Check for magnetometer calibration sub-commands
+            if ((input_buffer_index >= 4) && (toupper(input_buffer[3]) == 'G')) {
+              // \XMG - Magnetometer commands
+              if (input_buffer_index == 4) {
+                // \XMG - Auto magnetometer calibration
+                byte result = start_magnetometer_calibration_automatic();
+                if (result == CALIBRATION_IN_PROGRESS) {
+                  strcpy_P(return_string, (const char*) F("Auto mag cal started. Rotating..."));
+                } else if (result == CALIBRATION_ERROR_NO_SENSOR) {
+                  strcpy_P(return_string, (const char*) F("Error: No sensor response"));
+                } else if (result == CALIBRATION_ERROR_BUSY) {
+                  strcpy_P(return_string, (const char*) F("Error: Already rotating"));
+                } else if (result == CALIBRATION_ERROR_INSUFFICIENT_RANGE) {
+                  strcpy_P(return_string, (const char*) F("Error: Need ≥270° rotation capability"));
+                } else if (result == CALIBRATION_ERROR_LIMIT_ALREADY_HIT) {
+                  strcpy_P(return_string, (const char*) F("Error: Limit switch already triggered"));
+                } else {
+                  strcpy_P(return_string, (const char*) F("Error starting auto cal"));
+                }
+              } else if ((input_buffer_index >= 5) && (toupper(input_buffer[4]) == 'S')) {
+                // \XMGs - Start manual magnetometer calibration
+                byte result = calibrate_magnetometer_manual(0);
+                if (result == CALIBRATION_IN_PROGRESS) {
+                  strcpy_P(return_string, (const char*) F("Manual mag cal started. Rotate antenna 360°, then send \\XMGe"));
+                } else {
+                  strcpy_P(return_string, (const char*) F("Error starting cal"));
+                }
+              } else if ((input_buffer_index >= 5) && (toupper(input_buffer[4]) == 'E')) {
+                // \XMGe - End manual magnetometer calibration
+                byte result = calibrate_magnetometer_manual(2);
+                if (result == CALIBRATION_SUCCESS) {
+                  byte quality = assess_calibration_quality();
+                  if (quality == CALIBRATION_QUALITY_GOOD) {
+                    strcpy_P(return_string, (const char*) F("Mag cal saved. Quality: GOOD"));
+                  } else if (quality == CALIBRATION_QUALITY_POOR) {
+                    strcpy_P(return_string, (const char*) F("Mag cal saved. Quality: POOR - incomplete rotation?"));
+                  } else {
+                    strcpy_P(return_string, (const char*) F("Mag cal saved. Quality: SUSPECT - check for interference"));
+                  }
+                } else if (result == CALIBRATION_ERROR_INSUFFICIENT_DATA) {
+                  strcpy_P(return_string, (const char*) F("Error: Insufficient data (<100 samples)"));
+                } else {
+                  strcpy_P(return_string, (const char*) F("Error: Invalid calibration data"));
+                }
+              } else {
+                strcpy_P(return_string, (const char*) F("?>"));
+              }
+            } else
+          #endif
+          {
+            // Original moon calibration
+            update_moon_position();
+            if (calibrate_az_el(moon_azimuth, moon_elevation)) {
+              strcpy(return_string, az_el_calibrated_string());
+            } else {
+              strcpy_P(return_string, (const char*) F("Error."));
+            }
           }
           break;
         #endif // FEATURE_MOON_TRACKING
+        #if defined(FEATURE_AZ_POSITION_HMC5883L) || defined(FEATURE_AZ_POSITION_HMC5883L_USING_JARZEBSKI_LIBRARY) || \
+            defined(FEATURE_AZ_POSITION_DFROBOT_QMC5883) || defined(FEATURE_AZ_POSITION_MECHASOLUTION_QMC5883) || \
+            defined(FEATURE_AZ_POSITION_POLOLU_LSM303) || defined(FEATURE_AZ_POSITION_ADAFRUIT_LSM303)
+        case 'C':  // \XC - Show calibration status
+          if (configuration.magnetometer_calibration_valid) {
+            sprintf(return_string, "Mag: CALIBRATED X:%d..%d Y:%d..%d Z:%d..%d",
+              configuration.magnetometer_x_min, configuration.magnetometer_x_max,
+              configuration.magnetometer_y_min, configuration.magnetometer_y_max,
+              configuration.magnetometer_z_min, configuration.magnetometer_z_max);
+          } else {
+            strcpy_P(return_string, (const char*) F("Magnetometer: UNCALIBRATED"));
+          }
+          break;
+        #endif
         case '0':
           configuration.azimuth_starting_point = configuration.azimuth_starting_point - abs(configuration.azimuth_offset);
           configuration.azimuth_offset = 0;
@@ -15367,7 +16514,98 @@ byte process_backslash_command(byte input_buffer[], int input_buffer_index, byte
           }            
         }
         //zzzzzzzz
-      }      
+      }
+
+      // \XA[axis][from],[to] - Add calibration point manually
+      // Example: \XAA180.5,180.0 (azimuth) or \XAE45.2,45.0 (elevation)
+      if ((input_buffer_index > 3) && (toupper(input_buffer[2]) == 'A')){
+        byte axis = parse_axis(input_buffer[3]);
+
+        if (axis != 0){
+          byte comma_position = find_char_in_buffer(input_buffer, ',', 4, input_buffer_index);
+
+          if (comma_position > 0){
+            float from_value = parse_float_from_buffer(input_buffer, 4, comma_position);
+            float to_value = parse_float_from_buffer(input_buffer, comma_position + 1, input_buffer_index);
+
+            // Validate values
+            if (!validate_heading(from_value, axis) || !validate_heading(to_value, axis)){
+              strcpy_P(return_string, (const char*) F("Error: Heading out of range"));
+            } else {
+              // Warn if correction is large (likely user error)
+              float correction = abs(from_value - to_value);
+              if (correction > 45.0){
+                sprintf(return_string, "WARNING: Large correction (%.1f deg). Added anyway.", correction);
+                byte result = add_calibration_point(axis, from_value, to_value, 4);
+              } else {
+                byte result = add_calibration_point(axis, from_value, to_value, 4); // flag 4 = user
+
+                if (result == CALIBRATION_SUCCESS){
+                  sprintf(return_string, "Added %s calibration: %.2f -> %.2f",
+                          (axis == AZ ? "AZ" : "EL"), from_value, to_value);
+                } else {
+                  strcpy_P(return_string, (const char*) F("Error: Table full"));
+                }
+              }
+            }
+          } else {
+            strcpy_P(return_string, (const char*) F("Error: Missing comma"));
+          }
+        } else {
+          strcpy_P(return_string, (const char*) F("Error: Invalid axis (use A or E)"));
+        }
+      }
+
+      // \XR[axis][index] - Remove calibration point
+      // Example: \XRA3 (remove azimuth point at index 3) or \XRE2 (remove elevation point at index 2)
+      if ((input_buffer_index >= 5) && (toupper(input_buffer[2]) == 'R')){
+        byte axis = parse_axis(input_buffer[3]);
+
+        if (axis != 0){
+          // Parse index (can be 1 or 2 digits)
+          byte index = 0;
+          if (input_buffer_index == 5 && is_digit(input_buffer[4])){
+            index = input_buffer[4] - '0';
+          } else if (input_buffer_index == 6 && is_digit(input_buffer[4]) && is_digit(input_buffer[5])){
+            index = ((input_buffer[4] - '0') * 10) + (input_buffer[5] - '0');
+          } else {
+            strcpy_P(return_string, (const char*) F("Error: Invalid index format"));
+            break;
+          }
+
+          if (index < CALIBRATION_POINTS){
+            byte result = remove_calibration_point(axis, index);
+
+            if (result == CALIBRATION_SUCCESS){
+              sprintf(return_string, "Removed %s calibration point %d",
+                      (axis == AZ ? "AZ" : "EL"), index);
+            } else if (result == CALIBRATION_ERROR_INVALID_DATA){
+              strcpy_P(return_string, (const char*) F("Error: Cannot remove default endpoint"));
+            } else {
+              strcpy_P(return_string, (const char*) F("Error: Point not found"));
+            }
+          } else {
+            strcpy_P(return_string, (const char*) F("Error: Invalid index"));
+          }
+        } else {
+          strcpy_P(return_string, (const char*) F("Error: Invalid axis (use A or E)"));
+        }
+      }
+
+      // \XC[axis] - Clear calibration table for specific axis (preserves defaults)
+      // Example: \XCA (clear azimuth) or \XCE (clear elevation)
+      if ((input_buffer_index == 4) && (toupper(input_buffer[2]) == 'C')){
+        byte axis = parse_axis(input_buffer[3]);
+
+        if (axis != 0){
+          clear_calibration_table(axis, 0); // 0 = preserve defaults
+          configuration_dirty = 1;
+          sprintf(return_string, "Cleared %s calibration table", (axis == AZ ? "AZ" : "EL"));
+        } else {
+          strcpy_P(return_string, (const char*) F("Error: Invalid axis (use A or E)"));
+        }
+      }
+
       break; //case 'X'
 
     #endif //FEATURE_CALIBRATION
@@ -16131,6 +17369,178 @@ byte process_backslash_command(byte input_buffer[], int input_buffer_index, byte
           strconditionalcpy(return_string,"\\!OKCV", include_response_code);
           strcat(return_string,CODE_VERSION);
         }
+
+        // \?CQ - Quick calibration quality check
+        #if defined(FEATURE_AZ_POSITION_HMC5883L) || defined(FEATURE_AZ_POSITION_HMC5883L_USING_JARZEBSKI_LIBRARY) || \
+            defined(FEATURE_AZ_POSITION_DFROBOT_QMC5883) || defined(FEATURE_AZ_POSITION_MECHASOLUTION_QMC5883) || \
+            defined(FEATURE_AZ_POSITION_POLOLU_LSM303) || defined(FEATURE_AZ_POSITION_ADAFRUIT_LSM303)
+          if (input_buffer_index == 4 && input_buffer[2] == 'C' && input_buffer[3] == 'Q') {
+            if (configuration.magnetometer_calibration_valid) {
+              byte quality = assess_calibration_quality();
+              switch (quality) {
+                case CALIBRATION_QUALITY_GOOD:
+                  strcpy_P(return_string, (const char*) F("Cal: GOOD"));
+                  break;
+                case CALIBRATION_QUALITY_POOR:
+                  strcpy_P(return_string, (const char*) F("Cal: POOR - Recalibrate recommended (\\XMG)"));
+                  break;
+                case CALIBRATION_QUALITY_SUSPECT:
+                  strcpy_P(return_string, (const char*) F("Cal: SUSPECT - Check calibration (\\?CAL)"));
+                  break;
+                default:
+                  strcpy_P(return_string, (const char*) F("Cal: UNKNOWN"));
+                  break;
+              }
+            } else {
+              strcpy_P(return_string, (const char*) F("Cal: UNCALIBRATED - Run \\XMG"));
+            }
+          }
+        #endif
+
+        // \?CAL - Comprehensive calibration status (magnetometer + multi-point)
+        #if defined(FEATURE_AZ_POSITION_HMC5883L) || defined(FEATURE_AZ_POSITION_HMC5883L_USING_JARZEBSKI_LIBRARY) || \
+            defined(FEATURE_AZ_POSITION_DFROBOT_QMC5883) || defined(FEATURE_AZ_POSITION_MECHASOLUTION_QMC5883) || \
+            defined(FEATURE_AZ_POSITION_POLOLU_LSM303) || defined(FEATURE_AZ_POSITION_ADAFRUIT_LSM303) || \
+            defined(FEATURE_CALIBRATION)
+          if (input_buffer_index == 5 && input_buffer[2] == 'C' && input_buffer[3] == 'A' && input_buffer[4] == 'L') {
+            control_port->println(F("\n\rCalibration Status\n\r==================="));
+
+            // Magnetometer calibration status
+            #if defined(FEATURE_AZ_POSITION_HMC5883L) || defined(FEATURE_AZ_POSITION_HMC5883L_USING_JARZEBSKI_LIBRARY) || \
+                defined(FEATURE_AZ_POSITION_DFROBOT_QMC5883) || defined(FEATURE_AZ_POSITION_MECHASOLUTION_QMC5883) || \
+                defined(FEATURE_AZ_POSITION_POLOLU_LSM303) || defined(FEATURE_AZ_POSITION_ADAFRUIT_LSM303)
+              control_port->print(F("Magnetometer: "));
+              if (configuration.magnetometer_calibration_valid) {
+                control_port->print(F("CALIBRATED ("));
+                byte quality = assess_calibration_quality();
+                switch (quality) {
+                  case CALIBRATION_QUALITY_GOOD:
+                    control_port->println(F("GOOD quality)"));
+                    break;
+                  case CALIBRATION_QUALITY_POOR:
+                    control_port->println(F("POOR quality)"));
+                    break;
+                  case CALIBRATION_QUALITY_SUSPECT:
+                    control_port->println(F("SUSPECT quality)"));
+                    break;
+                }
+                sprintf(workstring, "  X: %d to %d", configuration.magnetometer_x_min, configuration.magnetometer_x_max);
+                control_port->println(workstring);
+                sprintf(workstring, "  Y: %d to %d", configuration.magnetometer_y_min, configuration.magnetometer_y_max);
+                control_port->println(workstring);
+                sprintf(workstring, "  Z: %d to %d", configuration.magnetometer_z_min, configuration.magnetometer_z_max);
+                control_port->println(workstring);
+              } else {
+                control_port->println(F("UNCALIBRATED"));
+                control_port->println(F("  Use \\XMG (auto) or \\XMGs/\\XMGe (manual)"));
+              }
+              control_port->println();
+            #endif
+
+            // Multi-point calibration status
+            #if defined(FEATURE_CALIBRATION)
+              // Count active AZ calibration points
+              byte az_points = 0;
+              for (byte x = 0; x < CALIBRATION_POINTS; x++) {
+                if (configuration.calibration_az_flag[x] > 0) {
+                  az_points++;
+                }
+              }
+
+              // Count active EL calibration points
+              byte el_points = 0;
+              for (byte x = 0; x < CALIBRATION_POINTS; x++) {
+                if (configuration.calibration_el_flag[x] > 0) {
+                  el_points++;
+                }
+              }
+
+              control_port->print(F("Multi-Point Calibration:\n\r  Azimuth: "));
+              control_port->print(az_points);
+              control_port->print(F(" point"));
+              if (az_points != 1) control_port->print(F("s"));
+              control_port->print(F(" active\n\r  Elevation: "));
+              control_port->print(el_points);
+              control_port->print(F(" point"));
+              if (el_points != 1) control_port->print(F("s"));
+              control_port->println(F(" active"));
+
+              if (az_points == 0 && el_points == 0) {
+                control_port->println(F("  Use \\X to view, \\XAA/\\XAE to add points"));
+              }
+            #endif
+
+            // Provide guided recommendations based on status
+            control_port->println(F("\n\rRecommended Next Steps:"));
+            control_port->println(F("======================"));
+
+            byte needs_action = 0;
+
+            #if defined(FEATURE_AZ_POSITION_HMC5883L) || defined(FEATURE_AZ_POSITION_HMC5883L_USING_JARZEBSKI_LIBRARY) || \
+                defined(FEATURE_AZ_POSITION_DFROBOT_QMC5883) || defined(FEATURE_AZ_POSITION_MECHASOLUTION_QMC5883) || \
+                defined(FEATURE_AZ_POSITION_POLOLU_LSM303) || defined(FEATURE_AZ_POSITION_ADAFRUIT_LSM303)
+              if (!configuration.magnetometer_calibration_valid) {
+                control_port->println(F("1. Run \\XMG for automatic magnetometer calibration"));
+                control_port->println(F("   (or \\XMGs, rotate antenna, then \\XMGe for manual)"));
+                needs_action = 1;
+              } else {
+                byte quality = assess_calibration_quality();
+                if (quality == CALIBRATION_QUALITY_POOR || quality == CALIBRATION_QUALITY_SUSPECT) {
+                  control_port->println(F("1. Magnetometer calibration quality is low"));
+                  control_port->println(F("   Consider recalibrating with \\XMG"));
+                  needs_action = 1;
+                }
+              }
+            #endif
+
+            #ifdef FEATURE_CALIBRATION
+              if (az_points <= 2) {
+                if (needs_action) {
+                  control_port->print(F("2. "));
+                } else {
+                  control_port->print(F("1. "));
+                }
+                control_port->println(F("Add multi-point azimuth calibration:"));
+                control_port->println(F("   - Manually: \\XAA[measured],[actual] (e.g., \\XAA90.5,90.0)"));
+                #ifdef FEATURE_SUN_TRACKING
+                  control_port->println(F("   - Auto with Sun: \\XS (when sun visible)"));
+                #endif
+                #ifdef FEATURE_MOON_TRACKING
+                  control_port->println(F("   - Auto with Moon: \\XM (when moon visible)"));
+                #endif
+                needs_action = 1;
+              }
+
+              #ifdef FEATURE_ELEVATION_CONTROL
+                if (el_points <= 2) {
+                  if (needs_action) {
+                    byte step_num = 2;
+                    if (az_points <= 2) step_num = 3;
+                    control_port->print(step_num);
+                    control_port->print(F(". "));
+                  } else {
+                    control_port->print(F("1. "));
+                  }
+                  control_port->println(F("Add multi-point elevation calibration:"));
+                  control_port->println(F("   - Manually: \\XAE[measured],[actual] (e.g., \\XAE45.2,45.0)"));
+                  #if defined(FEATURE_SUN_TRACKING) || defined(FEATURE_MOON_TRACKING)
+                    control_port->println(F("   - Auto with celestial tracking"));
+                  #endif
+                  needs_action = 1;
+                }
+              #endif
+            #endif
+
+            if (!needs_action) {
+              control_port->println(F("All calibrations complete! System is optimized."));
+              control_port->println(F("Use \\X to view calibration tables anytime."));
+            }
+
+            control_port->println();
+
+            strcpy_P(return_string, (const char*) F(""));  // No return string, already printed
+          }
+        #endif
 
         if ((input_buffer[2] == 'A') && (input_buffer[3] == 'O')) {  // \?AO - Azimuth Full CCW Calibration
           read_azimuth(1);
