@@ -13,7 +13,7 @@ from PyQt6.QtGui import QIcon, QColor, QAction
 from typing import Optional, List
 from pathlib import Path
 
-from ...validators.dependency_validator import (
+from validators.dependency_validator import (
     ValidationResult,
     ValidationIssue,
     ValidationSeverity

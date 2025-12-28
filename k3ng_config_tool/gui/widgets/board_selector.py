@@ -13,7 +13,7 @@ from PyQt6.QtGui import QFont
 from pathlib import Path
 from typing import Optional
 
-from ...boards.board_database import BoardDatabase, BoardDefinition
+from boards.board_database import BoardDatabase, BoardDefinition
 
 
 class BoardSelectorWidget(QWidget):
