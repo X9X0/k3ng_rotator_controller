@@ -1,0 +1,169 @@
+# Value Range Validation Rules for K3NG Configuration
+# Validates numeric parameter ranges and constraints
+
+pwm_values:
+  # PWM values must be 0-255 (8-bit)
+  - settings:
+      - VARIABLE_AZIMUTH_SLOW_DOWN_PWM_START
+      - VARIABLE_AZIMUTH_SLOW_DOWN_PWM_STOP
+      - VARIABLE_ELEVATION_SLOW_DOWN_PWM_START
+      - VARIABLE_ELEVATION_SLOW_DOWN_PWM_STOP
+      - AZIMUTH_STARTING_POINT_DEFAULT
+      - ELEVATION_STARTING_POINT_DEFAULT
+      - ROTATION_INDICATOR_PIN_PWM
+      - AZ_INITIALLY_IN_SLOW_DOWN_PWM
+      - EL_INITIALLY_IN_SLOW_DOWN_PWM
+    min: 0
+    max: 255
+    unit: "PWM"
+    error_message: "PWM values must be between 0 and 255"
+
+speed_settings:
+  # Motor speed values (PWM)
+  - settings:
+      - NORMAL_AZ_SPEED_VOLTAGE
+      - NORMAL_EL_SPEED_VOLTAGE
+      - SLOW_SPEED_VOLTAGE
+      - SLOW_AZ_SPEED_VOLTAGE
+      - SLOW_EL_SPEED_VOLTAGE
+      - INITIAL_NORMAL_AZ_SPEED_VOLTAGE
+      - INITIAL_NORMAL_EL_SPEED_VOLTAGE
+      - INITIAL_SLOW_AZ_SPEED_VOLTAGE
+      - INITIAL_SLOW_EL_SPEED_VOLTAGE
+    min: 0
+    max: 255
+    unit: "PWM"
+    error_message: "Motor speed must be between 0 and 255"
+    warning_min: 50
+    warning_max: 255
+    warning_message: "Motor speed below 50 may not provide enough torque"
+
+azimuth_angles:
+  # Azimuth angles (0-360 degrees)
+  - settings:
+      - AZIMUTH_STARTING_POINT
+      - AZIMUTH_ROTATION_CAPABILITY
+      - AZIMUTH_STARTING_POINT_DEFAULT
+      - ANALOG_AZ_FULL_CCW
+      - ANALOG_AZ_FULL_CW
+      - AZIMUTH_MECHANICAL_DEGREE_CORRECTION
+    min: 0
+    max: 360
+    unit: "degrees"
+    error_message: "Azimuth angles must be between 0 and 360 degrees"
+
+elevation_angles:
+  # Elevation angles (0-180 degrees)
+  - settings:
+      - ELEVATION_MAXIMUM_DEGREES
+      - ANALOG_EL_0_DEGREES
+      - ANALOG_EL_MAX_ELEVATION
+      - ELEVATION_STARTING_POINT_DEFAULT
+      - ELEVATION_MECHANICAL_DEGREE_CORRECTION
+    min: 0
+    max: 180
+    unit: "degrees"
+    error_message: "Elevation angles must be between 0 and 180 degrees"
+
+analog_readings:
+  # Analog input values (10-bit ADC: 0-1023)
+  - settings:
+      - ANALOG_AZ_FULL_CCW
+      - ANALOG_AZ_FULL_CW
+      - ANALOG_EL_0_DEGREES
+      - ANALOG_EL_MAX_ELEVATION
+      - ANALOG_AZ_OVERLAP_DEGREES
+    min: 0
+    max: 1023
+    unit: "ADC"
+    error_message: "Analog readings must be between 0 and 1023 (10-bit ADC)"
+
+frequencies:
+  # Timer frequencies (Hz)
+  - settings:
+      - AZ_SLOW_START_UP_FREQ
+      - AZ_SLOW_DOWN_FREQ
+      - EL_SLOW_START_UP_FREQ
+      - EL_SLOW_DOWN_FREQ
+    min: 31
+    max: 20000
+    unit: "Hz"
+    error_message: "Frequencies must be between 31 and 20000 Hz"
+    warning_min: 100
+    warning_max: 10000
+    warning_message: "Frequencies outside 100-10000 Hz may cause issues with Arduino timers"
+
+time_delays:
+  # Time delays in milliseconds
+  - settings:
+      - SLOW_START_UP_TIME
+      - SLOW_DOWN_TIME
+      - TIMED_SLOW_DOWN_TIME
+      - AZ_SLOW_START_STARTING_PWM
+      - AZ_SLOW_START_STEPS
+      - BUTTON_DEBOUNCE_DELAY
+      - SERIAL_LED_TIME_MS
+      - AZ_BRAKE_DELAY
+      - EL_BRAKE_DELAY
+      - BRAKE_ACTIVE_STATE
+    min: 0
+    max: 30000
+    unit: "ms"
+    error_message: "Time delays must be between 0 and 30000 milliseconds"
+    warning_max: 10000
+    warning_message: "Delays over 10 seconds may impact responsiveness"
+
+serial_baud_rates:
+  # Serial baud rates (common values)
+  - settings:
+      - CONTROL_PORT_MAPPED_TO_SERIAL
+    allowed_values: [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200]
+    error_message: "Baud rate must be a standard value (9600, 19200, 38400, 57600, 115200, etc.)"
+
+rotation_speeds:
+  # Rotation speed in degrees per second
+  - settings:
+      - AZ_ROTATION_DEGREES_PER_SECOND
+      - EL_ROTATION_DEGREES_PER_SECOND
+    min: 1
+    max: 360
+    unit: "deg/s"
+    error_message: "Rotation speed must be between 1 and 360 degrees per second"
+    warning_min: 5
+    warning_max: 180
+    warning_message: "Rotation speeds outside 5-180 deg/s are uncommon"
+
+latitude_longitude:
+  # Geographic coordinates
+  - settings:
+      - LATITUDE
+      - LONGITUDE_FIXED
+    min: -180
+    max: 180
+    unit: "degrees"
+    error_message: "Latitude must be -90 to 90, Longitude must be -180 to 180"
+
+positive_integers:
+  # Values that must be positive
+  - settings:
+      - AZIMUTH_TOLERANCE
+      - ELEVATION_TOLERANCE
+      - AZ_POSITION_PULSE_DEG_PER_PULSE
+      - EL_POSITION_PULSE_DEG_PER_PULSE
+      - AZIMUTH_ENCODER_DEGREES_PER_PULSE
+      - ELEVATION_ENCODER_DEGREES_PER_PULSE
+    min: 0
+    max: 1000000
+    unit: "value"
+    error_message: "Value must be positive"
+
+calibration_tables:
+  # Calibration table size constraints
+  - settings:
+      - ANALOG_AZ_FULL_CCW
+      - ANALOG_AZ_FULL_CW
+    array_min_size: 2
+    array_max_size: 8
+    error_message: "Calibration tables must have 2-8 entries"
+    consistency_check: "ascending"
+    consistency_message: "Calibration values should be in ascending order"

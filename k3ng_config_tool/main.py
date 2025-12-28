@@ -186,16 +186,50 @@ def cmd_settings(args):
     return 0
 
 
+def cmd_boards(args):
+    """List available Arduino boards"""
+    paths = ConfigurationPaths.from_project_dir(args.project_dir)
+    manager = ConfigurationManager(paths)
+
+    print("=" * 60)
+    print("AVAILABLE ARDUINO BOARDS")
+    print("=" * 60)
+
+    boards = manager.list_boards()
+    for board in boards:
+        print(f"\n{board['board_name']} ({board['board_id']})")
+        print(f"  MCU: {board['mcu']} ({board['family']})")
+        print(f"  {board['description']}")
+
+        # Get detailed info
+        manager.set_board(board['board_id'])
+        summary = manager.get_board_summary()
+        if summary:
+            print(f"  Memory: {summary['flash_kb']}KB flash, {summary['sram_kb']}KB SRAM")
+            print(f"  Pins: {summary['digital_pins']} digital, {summary['analog_pins']} analog, {summary['pwm_pins']} PWM, {summary['interrupt_pins']} interrupt")
+            print(f"  Recommended for: {summary['recommended_for']}")
+
+    return 0
+
+
 def cmd_validate(args):
     """Validate configuration"""
     print(f"Validating configuration from: {args.project_dir}\n")
 
     paths = ConfigurationPaths.from_project_dir(args.project_dir)
-    manager = ConfigurationManager(paths)
+    manager = ConfigurationManager(paths, board_id=args.board if hasattr(args, 'board') else None)
 
     if not manager.load():
         print("❌ Failed to load configuration")
         return 1
+
+    # Display board info if specified
+    if hasattr(args, 'board') and args.board:
+        summary = manager.get_board_summary()
+        if summary:
+            print(f"Board: {summary['board_name']} ({args.board})")
+            print(f"MCU: {summary['mcu']} | Memory: {summary['flash_kb']}KB flash, {summary['sram_kb']}KB SRAM")
+            print()
 
     # Run validation
     result = manager.validate()
@@ -295,9 +329,14 @@ def main():
     parser_settings = subparsers.add_parser('settings', help='List settings')
     parser_settings.add_argument('project_dir', help='Path to K3NG project directory')
 
+    # Boards command
+    parser_boards = subparsers.add_parser('boards', help='List available Arduino boards')
+    parser_boards.add_argument('project_dir', help='Path to K3NG project directory')
+
     # Validate command
     parser_validate = subparsers.add_parser('validate', help='Validate configuration')
     parser_validate.add_argument('project_dir', help='Path to K3NG project directory')
+    parser_validate.add_argument('--board', help='Arduino board for pin validation (e.g., arduino_mega_2560)')
     parser_validate.add_argument('--apply-fixes', action='store_true', help='Apply auto-fixes automatically')
 
     args = parser.parse_args()
@@ -316,6 +355,8 @@ def main():
         return cmd_pins(args)
     elif args.command == 'settings':
         return cmd_settings(args)
+    elif args.command == 'boards':
+        return cmd_boards(args)
     elif args.command == 'validate':
         return cmd_validate(args)
     else:

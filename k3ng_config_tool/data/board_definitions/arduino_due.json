@@ -1,0 +1,151 @@
+{
+  "board_name": "Arduino Due",
+  "board_id": "arduino_due",
+  "mcu": "AT91SAM3X8E",
+  "family": "arm",
+  "description": "Arduino Due - ARM Cortex-M3 with Mega pin layout",
+  "memory": {
+    "flash_kb": 512,
+    "sram_kb": 96,
+    "eeprom_kb": 0
+  },
+  "pins": {
+    "digital": {
+      "count": 54,
+      "range": [0, 53]
+    },
+    "analog": {
+      "count": 12,
+      "names": ["A0", "A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "A11"],
+      "digital_equivalent": [54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65]
+    },
+    "pwm": [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
+    "dac": ["DAC0", "DAC1"],
+    "interrupt": {
+      "2": 0,
+      "3": 1,
+      "4": 2,
+      "5": 3,
+      "6": 4,
+      "7": 5,
+      "8": 6,
+      "9": 7,
+      "10": 8,
+      "11": 9,
+      "12": 10,
+      "13": 11,
+      "14": 12,
+      "15": 13,
+      "16": 14,
+      "17": 15,
+      "18": 16,
+      "19": 17,
+      "20": 18,
+      "21": 19,
+      "22": 20,
+      "23": 21,
+      "24": 22,
+      "25": 23,
+      "26": 24,
+      "27": 25,
+      "28": 26,
+      "29": 27,
+      "30": 28,
+      "31": 29,
+      "32": 30,
+      "33": 31,
+      "34": 32,
+      "35": 33,
+      "36": 34,
+      "37": 35,
+      "38": 36,
+      "39": 37,
+      "40": 38,
+      "41": 39,
+      "42": 40,
+      "43": 41,
+      "44": 42,
+      "45": 43,
+      "46": 44,
+      "47": 45,
+      "48": 46,
+      "49": 47,
+      "50": 48,
+      "51": 49,
+      "52": 50,
+      "53": 51
+    },
+    "i2c": {
+      "sda": 20,
+      "scl": 21,
+      "sda1": 70,
+      "scl1": 71
+    },
+    "spi": {
+      "mosi": 75,
+      "miso": 74,
+      "sck": 76,
+      "ss": 10
+    },
+    "serial": [
+      {
+        "rx": 0,
+        "tx": 1,
+        "name": "Serial",
+        "class": "HardwareSerial"
+      },
+      {
+        "rx": 19,
+        "tx": 18,
+        "name": "Serial1",
+        "class": "HardwareSerial"
+      },
+      {
+        "rx": 17,
+        "tx": 16,
+        "name": "Serial2",
+        "class": "HardwareSerial"
+      },
+      {
+        "rx": 15,
+        "tx": 14,
+        "name": "Serial3",
+        "class": "HardwareSerial"
+      }
+    ]
+  },
+  "capabilities": {
+    "max_analog_resolution": 12,
+    "analog_write_resolution": 12,
+    "analog_reference_options": ["DEFAULT"],
+    "timer_count": 9,
+    "uart_count": 4,
+    "i2c_count": 2,
+    "spi_count": 1,
+    "usb_native": true,
+    "voltage": 3.3,
+    "cpu_speed_mhz": 84,
+    "dac_count": 2
+  },
+  "validation_rules": {
+    "pulse_input_pins": "interrupt",
+    "incremental_encoder_pins": "interrupt",
+    "pwm_output_pins": "pwm",
+    "i2c_reserved": [20, 21, 70, 71],
+    "spi_reserved": [10, 74, 75, 76],
+    "serial_reserved": [0, 1, 14, 15, 16, 17, 18, 19]
+  },
+  "notes": [
+    "**3.3V LOGIC LEVELS - ensure level shifting for 5V devices**",
+    "**NO EEPROM - must use DueFlashStorage library or SD card**",
+    "All pins can be used for interrupts - excellent for encoders",
+    "Massive memory for all features including satellite tracking",
+    "12-bit ADC and DAC provide excellent analog resolution",
+    "84 MHz ARM processor provides excellent performance",
+    "USB native support with 4 hardware serial ports",
+    "Pin 13 has onboard LED - may interfere with some uses",
+    "Two I2C buses available for complex sensor setups",
+    "Same physical layout as Mega - shields may need level shifting"
+  ],
+  "recommended_for": "High-performance AZ/EL systems requiring maximum memory and processing power"
+}
