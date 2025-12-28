@@ -186,6 +186,84 @@ def cmd_settings(args):
     return 0
 
 
+def cmd_validate(args):
+    """Validate configuration"""
+    print(f"Validating configuration from: {args.project_dir}\n")
+
+    paths = ConfigurationPaths.from_project_dir(args.project_dir)
+    manager = ConfigurationManager(paths)
+
+    if not manager.load():
+        print("❌ Failed to load configuration")
+        return 1
+
+    # Run validation
+    result = manager.validate()
+
+    print("=" * 60)
+    print("VALIDATION RESULTS")
+    print("=" * 60)
+
+    if result.passed:
+        print("\n✅ Configuration is valid!\n")
+    else:
+        print(f"\n❌ Configuration has {len(result.errors)} error(s)\n")
+
+    # Show errors
+    if result.errors:
+        print("ERRORS:")
+        for i, error in enumerate(result.errors, 1):
+            print(f"\n{i}. {error.message}")
+            print(f"   Affected: {', '.join(error.affected_features)}")
+            if error.suggestion:
+                print(f"   💡 Suggestion: {error.suggestion}")
+
+    # Show warnings
+    if result.warnings:
+        print("\n" + "=" * 60)
+        print("WARNINGS:")
+        for i, warning in enumerate(result.warnings, 1):
+            print(f"\n{i}. {warning.message}")
+            print(f"   Affected: {', '.join(warning.affected_features)}")
+            if warning.suggestion:
+                print(f"   💡 Suggestion: {warning.suggestion}")
+
+    # Show info/suggestions
+    if result.info:
+        print("\n" + "=" * 60)
+        print("SUGGESTIONS:")
+        for i, info in enumerate(result.info, 1):
+            print(f"\n{i}. {info.message}")
+            if info.affected_features:
+                print(f"   Features: {', '.join(info.affected_features)}")
+
+    # Show auto-fix summary
+    if result.auto_fixes:
+        print("\n" + "=" * 60)
+        print(f"AUTO-FIX AVAILABLE:")
+        print(f"The following features can be automatically enabled:")
+        for feature in sorted(result.auto_fixes):
+            print(f"  • {feature}")
+
+        if args.apply_fixes:
+            print("\nApplying auto-fixes...")
+            count = manager.apply_auto_fixes()
+            print(f"✅ Enabled {count} features")
+
+            # Re-validate
+            result = manager.validate()
+            if result.passed:
+                print("✅ Configuration is now valid!")
+            else:
+                print(f"⚠️  Still has {len(result.errors)} error(s) that need manual fixing")
+
+    print("\n" + "=" * 60)
+    summary = manager.get_validation_summary()
+    print(f"Summary: {summary['error_count']} errors, {summary['warning_count']} warnings, {summary['info_count']} suggestions")
+
+    return 0 if result.passed else 1
+
+
 def main():
     """Main entry point"""
     parser = argparse.ArgumentParser(
@@ -217,6 +295,11 @@ def main():
     parser_settings = subparsers.add_parser('settings', help='List settings')
     parser_settings.add_argument('project_dir', help='Path to K3NG project directory')
 
+    # Validate command
+    parser_validate = subparsers.add_parser('validate', help='Validate configuration')
+    parser_validate.add_argument('project_dir', help='Path to K3NG project directory')
+    parser_validate.add_argument('--apply-fixes', action='store_true', help='Apply auto-fixes automatically')
+
     args = parser.parse_args()
 
     # Print banner
@@ -233,6 +316,8 @@ def main():
         return cmd_pins(args)
     elif args.command == 'settings':
         return cmd_settings(args)
+    elif args.command == 'validate':
+        return cmd_validate(args)
     else:
         parser.print_help()
         return 0

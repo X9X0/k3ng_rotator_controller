@@ -1,0 +1,302 @@
+# K3NG Rotator Controller - Dependency Validation Rules
+# Extracted from rotator_dependencies.h
+
+# Mutual Exclusivity - Only ONE feature from each group can be active
+mutual_exclusivity:
+  - group: protocol_emulation
+    features:
+      - FEATURE_YAESU_EMULATION
+      - FEATURE_EASYCOM_EMULATION
+      - FEATURE_DCU_1_EMULATION
+    error_message: "You can't activate multiple protocol emulations simultaneously"
+    max_count: 1
+    min_count: 0
+
+  - group: master_slave_link
+    features:
+      - FEATURE_MASTER_WITH_SERIAL_SLAVE
+      - FEATURE_MASTER_WITH_ETHERNET_SLAVE
+    error_message: "You cannot activate both FEATURE_MASTER_WITH_SERIAL_SLAVE and FEATURE_MASTER_WITH_ETHERNET_SLAVE"
+    max_count: 1
+    min_count: 0
+
+  - group: rtc_selection
+    features:
+      - FEATURE_RTC_DS1307
+      - FEATURE_RTC_PCF8583
+    error_message: "You can't have two RTC features enabled"
+    max_count: 1
+    min_count: 0
+
+  - group: adxl345_library
+    features:
+      - FEATURE_EL_POSITION_ADXL345_USING_LOVE_ELECTRON_LIB
+      - FEATURE_EL_POSITION_ADXL345_USING_ADAFRUIT_LIB
+    error_message: "You must select only one library for the ADXL345"
+    max_count: 1
+    min_count: 0
+
+  - group: gps_library
+    features:
+      - OPTION_GPS_USE_TINY_GPS_LIBRARY
+      - OPTION_GPS_USE_SPARKFUN_U_BLOX_GNSS_LIBRARY
+    error_message: "You must select only one GPS library"
+    max_count: 1
+    min_count: 0
+    when: FEATURE_GPS
+
+  - group: az_position_sensor
+    features:
+      - FEATURE_AZ_POSITION_POTENTIOMETER
+      - FEATURE_AZ_POSITION_ROTARY_ENCODER
+      - FEATURE_AZ_POSITION_PULSE_INPUT
+      - FEATURE_AZ_POSITION_GET_FROM_REMOTE_UNIT
+      - FEATURE_AZ_POSITION_HMC5883L
+      - FEATURE_AZ_POSITION_ADAFRUIT_LSM303
+      - FEATURE_AZ_POSITION_HH12_AS5045_SSI
+      - FEATURE_AZ_POSITION_HH12_AS5045_SSI_RELATIVE
+      - FEATURE_AZ_POSITION_INCREMENTAL_ENCODER
+      - FEATURE_AZ_POSITION_POLOLU_LSM303
+      - FEATURE_AZ_POSITION_A2_ABSOLUTE_ENCODER
+      - FEATURE_AZ_POSITION_ROTARY_ENCODER_USE_PJRC_LIBRARY
+      - FEATURE_AZ_POSITION_HMC5883L_USING_JARZEBSKI_LIBRARY
+      - FEATURE_AZ_POSITION_DFROBOT_QMC5883
+      - FEATURE_AZ_POSITION_MECHASOLUTION_QMC5883
+    error_message: "You must specify exactly one AZ position sensor feature"
+    max_count: 1
+    min_count: 1
+
+  - group: el_position_sensor
+    features:
+      - FEATURE_EL_POSITION_POTENTIOMETER
+      - FEATURE_EL_POSITION_ROTARY_ENCODER
+      - FEATURE_EL_POSITION_PULSE_INPUT
+      - FEATURE_EL_POSITION_ADXL345_USING_LOVE_ELECTRON_LIB
+      - FEATURE_EL_POSITION_ADXL345_USING_ADAFRUIT_LIB
+      - FEATURE_EL_POSITION_GET_FROM_REMOTE_UNIT
+      - FEATURE_EL_POSITION_ADAFRUIT_LSM303
+      - FEATURE_EL_POSITION_HH12_AS5045_SSI
+      - FEATURE_EL_POSITION_INCREMENTAL_ENCODER
+      - FEATURE_EL_POSITION_MEMSIC_2125
+      - FEATURE_EL_POSITION_POLOLU_LSM303
+      - FEATURE_EL_POSITION_A2_ABSOLUTE_ENCODER
+      - FEATURE_EL_POSITION_ROTARY_ENCODER_USE_PJRC_LIBRARY
+    error_message: "You must specify exactly one EL position sensor feature when elevation control is enabled"
+    max_count: 1
+    min_count: 1
+    when: FEATURE_ELEVATION_CONTROL
+
+# Required Dependencies - Feature X requires Feature Y
+required_dependencies:
+  - feature: FEATURE_DCU_1_EMULATION
+    conflicts_with:
+      - FEATURE_ELEVATION_CONTROL
+    error_message: "FEATURE_ELEVATION_CONTROL isn't supported with FEATURE_DCU_1_EMULATION"
+
+  - feature: FEATURE_EL_POSITION_GET_FROM_REMOTE_UNIT
+    requires_any:
+      - FEATURE_MASTER_WITH_SERIAL_SLAVE
+      - FEATURE_MASTER_WITH_ETHERNET_SLAVE
+    error_message: "You must activate FEATURE_MASTER_WITH_SERIAL_SLAVE or FEATURE_MASTER_WITH_ETHERNET_SLAVE when using FEATURE_EL_POSITION_GET_FROM_REMOTE_UNIT"
+
+  - feature: FEATURE_AZ_POSITION_GET_FROM_REMOTE_UNIT
+    requires_any:
+      - FEATURE_MASTER_WITH_SERIAL_SLAVE
+      - FEATURE_MASTER_WITH_ETHERNET_SLAVE
+    error_message: "You must activate FEATURE_MASTER_WITH_SERIAL_SLAVE or FEATURE_MASTER_WITH_ETHERNET_SLAVE when using FEATURE_AZ_POSITION_GET_FROM_REMOTE_UNIT"
+
+  - feature: FEATURE_REMOTE_UNIT_SLAVE
+    conflicts_with:
+      - FEATURE_MASTER_WITH_SERIAL_SLAVE
+      - FEATURE_MASTER_WITH_ETHERNET_SLAVE
+      - FEATURE_YAESU_EMULATION
+      - FEATURE_EASYCOM_EMULATION
+      - OPTION_SYNC_MASTER_CLOCK_TO_SLAVE
+      - OPTION_SYNC_MASTER_COORDINATES_TO_SLAVE
+    error_message: "You cannot make this unit be both a master and a slave, or use protocol emulation with remote slave"
+
+  - feature: FEATURE_AZ_POSITION_GET_FROM_REMOTE_UNIT
+    conflicts_with:
+      - FEATURE_AZ_POSITION_POTENTIOMETER
+      - FEATURE_AZ_POSITION_ROTARY_ENCODER
+      - FEATURE_AZ_POSITION_PULSE_INPUT
+      - FEATURE_AZ_POSITION_HMC5883L
+      - FEATURE_AZ_POSITION_INCREMENTAL_ENCODER
+    error_message: "You cannot get AZ position from remote unit and have a local azimuth sensor defined"
+
+  - feature: FEATURE_EL_POSITION_GET_FROM_REMOTE_UNIT
+    conflicts_with:
+      - FEATURE_EL_POSITION_POTENTIOMETER
+      - FEATURE_EL_POSITION_ROTARY_ENCODER
+      - FEATURE_EL_POSITION_PULSE_INPUT
+      - FEATURE_EL_POSITION_ADXL345_USING_LOVE_ELECTRON_LIB
+      - FEATURE_EL_POSITION_ADXL345_USING_ADAFRUIT_LIB
+      - FEATURE_EL_POSITION_INCREMENTAL_ENCODER
+    error_message: "You cannot get EL position from remote unit and have a local elevation sensor defined"
+
+  - feature: FEATURE_MOON_TRACKING
+    requires:
+      - FEATURE_ELEVATION_CONTROL
+      - FEATURE_CLOCK
+    error_message: "FEATURE_MOON_TRACKING requires FEATURE_ELEVATION_CONTROL and FEATURE_CLOCK"
+
+  - feature: FEATURE_SUN_TRACKING
+    requires:
+      - FEATURE_ELEVATION_CONTROL
+      - FEATURE_CLOCK
+    error_message: "FEATURE_SUN_TRACKING requires FEATURE_ELEVATION_CONTROL and FEATURE_CLOCK"
+
+  - feature: FEATURE_SATELLITE_TRACKING
+    requires:
+      - FEATURE_ELEVATION_CONTROL
+      - FEATURE_CLOCK
+    error_message: "FEATURE_SATELLITE_TRACKING requires FEATURE_ELEVATION_CONTROL and FEATURE_CLOCK"
+
+  - feature: FEATURE_MASTER_WITH_ETHERNET_SLAVE
+    requires:
+      - FEATURE_ETHERNET
+    error_message: "FEATURE_MASTER_WITH_ETHERNET_SLAVE requires FEATURE_ETHERNET"
+
+  - feature: FEATURE_AUTOPARK
+    requires:
+      - FEATURE_PARK
+    error_message: "FEATURE_AUTOPARK requires FEATURE_PARK"
+
+  - feature: FEATURE_NEXTION_DISPLAY
+    conflicts_with:
+      - OPTION_SAVE_MEMORY_EXCLUDE_EXTENDED_COMMANDS
+      - OPTION_SAVE_MEMORY_EXCLUDE_BACKSLASH_CMDS
+    error_message: "FEATURE_NEXTION_DISPLAY requires extended commands. Disable OPTION_SAVE_MEMORY_EXCLUDE_EXTENDED_COMMANDS and OPTION_SAVE_MEMORY_EXCLUDE_BACKSLASH_CMDS"
+
+  - feature: FEATURE_GPS
+    requires_any:
+      - OPTION_GPS_USE_TINY_GPS_LIBRARY
+      - OPTION_GPS_USE_SPARKFUN_U_BLOX_GNSS_LIBRARY
+    error_message: "FEATURE_GPS requires either OPTION_GPS_USE_TINY_GPS_LIBRARY or OPTION_GPS_USE_SPARKFUN_U_BLOX_GNSS_LIBRARY"
+
+  - feature: FEATURE_MASTER_SEND_AZ_ROTATION_COMMANDS_TO_REMOTE
+    requires_any:
+      - FEATURE_MASTER_WITH_SERIAL_SLAVE
+      - FEATURE_MASTER_WITH_ETHERNET_SLAVE
+    error_message: "FEATURE_MASTER_SEND_AZ_ROTATION_COMMANDS_TO_REMOTE can only be used with FEATURE_MASTER_WITH_SERIAL_SLAVE or FEATURE_MASTER_WITH_ETHERNET_SLAVE"
+
+  - feature: FEATURE_MASTER_SEND_EL_ROTATION_COMMANDS_TO_REMOTE
+    requires_any:
+      - FEATURE_MASTER_WITH_SERIAL_SLAVE
+      - FEATURE_MASTER_WITH_ETHERNET_SLAVE
+    error_message: "FEATURE_MASTER_SEND_EL_ROTATION_COMMANDS_TO_REMOTE can only be used with FEATURE_MASTER_WITH_SERIAL_SLAVE or FEATURE_MASTER_WITH_ETHERNET_SLAVE"
+
+# Auto-Enablement - If Feature X is active, automatically enable Feature Y
+auto_enablement:
+  - trigger_any:
+      - FEATURE_AZ_PRESET_ENCODER
+      - FEATURE_EL_PRESET_ENCODER
+      - FEATURE_AZ_POSITION_ROTARY_ENCODER
+      - FEATURE_EL_POSITION_ROTARY_ENCODER
+    auto_enable:
+      - FEATURE_ROTARY_ENCODER_SUPPORT
+    message: "Auto-enabling FEATURE_ROTARY_ENCODER_SUPPORT for rotary encoder support"
+
+  - trigger_any:
+      - FEATURE_4_BIT_LCD_DISPLAY
+      - FEATURE_I2C_LCD
+      - FEATURE_ADAFRUIT_I2C_LCD
+      - FEATURE_YOURDUINO_I2C_LCD
+      - FEATURE_RFROBOT_I2C_DISPLAY
+      - FEATURE_YWROBOT_I2C_DISPLAY
+      - FEATURE_SAINSMART_I2C_LCD
+      - FEATURE_MIDAS_I2C_DISPLAY
+      - FEATURE_FABO_LCD_PCF8574_DISPLAY
+    auto_enable:
+      - FEATURE_LCD_DISPLAY
+    message: "Auto-enabling FEATURE_LCD_DISPLAY for LCD support"
+
+  - trigger_any:
+      - FEATURE_ADAFRUIT_I2C_LCD
+      - FEATURE_YOURDUINO_I2C_LCD
+      - FEATURE_RFROBOT_I2C_DISPLAY
+      - FEATURE_YWROBOT_I2C_DISPLAY
+      - FEATURE_SAINSMART_I2C_LCD
+      - FEATURE_MIDAS_I2C_DISPLAY
+      - FEATURE_FABO_LCD_PCF8574_DISPLAY
+    auto_enable:
+      - FEATURE_I2C_LCD
+    message: "Auto-enabling FEATURE_I2C_LCD for I2C LCD support"
+
+  - trigger_any:
+      - FEATURE_RTC_DS1307
+      - FEATURE_RTC_PCF8583
+      - FEATURE_I2C_LCD
+      - FEATURE_AZ_POSITION_HMC5883L
+      - FEATURE_AZ_POSITION_ADAFRUIT_LSM303
+      - FEATURE_EL_POSITION_ADAFRUIT_LSM303
+      - FEATURE_AZ_POSITION_POLOLU_LSM303
+      - FEATURE_EL_POSITION_POLOLU_LSM303
+      - FEATURE_EL_POSITION_ADXL345_USING_LOVE_ELECTRON_LIB
+      - FEATURE_EL_POSITION_ADXL345_USING_ADAFRUIT_LIB
+      - FEATURE_AZ_POSITION_HMC5883L_USING_JARZEBSKI_LIBRARY
+      - FEATURE_AZ_POSITION_DFROBOT_QMC5883
+      - FEATURE_AZ_POSITION_MECHASOLUTION_QMC5883
+      - FEATURE_HD44780_I2C_DISPLAY
+    auto_enable:
+      - FEATURE_WIRE_SUPPORT
+    message: "Auto-enabling FEATURE_WIRE_SUPPORT for I2C device support"
+
+  - trigger:
+      - FEATURE_RTC_DS1307
+    auto_enable:
+      - FEATURE_RTC
+    message: "Auto-enabling FEATURE_RTC for RTC support"
+
+  - trigger:
+      - FEATURE_RTC_PCF8583
+    auto_enable:
+      - FEATURE_RTC
+    message: "Auto-enabling FEATURE_RTC for RTC support"
+
+  - trigger:
+      - FEATURE_GPS
+    auto_enable:
+      - FEATURE_CLOCK
+    message: "Auto-enabling FEATURE_CLOCK for GPS time synchronization"
+
+  - trigger:
+      - FEATURE_REMOTE_UNIT_SLAVE
+    auto_enable:
+      - FEATURE_ONE_DECIMAL_PLACE_HEADINGS
+    message: "Auto-enabling FEATURE_ONE_DECIMAL_PLACE_HEADINGS for remote unit slave"
+
+  - trigger_any:
+      - FEATURE_YAESU_EMULATION
+      - FEATURE_EASYCOM_EMULATION
+      - FEATURE_DCU_1_EMULATION
+    auto_enable:
+      - CONTROL_PROTOCOL_EMULATION
+    message: "Auto-enabling CONTROL_PROTOCOL_EMULATION flag"
+
+# Conditional Auto-Disablement - Feature X is disabled if conditions aren't met
+conditional_disable:
+  - feature: FEATURE_EL_POSITION_PULSE_INPUT
+    requires:
+      - FEATURE_ELEVATION_CONTROL
+    action: disable
+    message: "FEATURE_EL_POSITION_PULSE_INPUT disabled because FEATURE_ELEVATION_CONTROL is not enabled"
+
+  - feature: FEATURE_EL_PRESET_ENCODER
+    requires:
+      - FEATURE_ELEVATION_CONTROL
+    action: disable
+    message: "FEATURE_EL_PRESET_ENCODER disabled because FEATURE_ELEVATION_CONTROL is not enabled"
+
+# Hardware-specific auto-enablement
+hardware_rules:
+  - hardware: HARDWARE_EA4TX_ARS_USB
+    auto_enable:
+      - FEATURE_4_BIT_LCD_DISPLAY
+    message: "Auto-enabling FEATURE_4_BIT_LCD_DISPLAY for EA4TX ARS USB hardware"
+
+  - hardware: HARDWARE_EA4TX_ARS_USB
+    when: FEATURE_ELEVATION_CONTROL
+    auto_define:
+      - HACK_REDUCED_DEBUG
+    message: "Enabling HACK_REDUCED_DEBUG for EA4TX with elevation control"
