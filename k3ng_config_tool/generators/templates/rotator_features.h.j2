@@ -9,120 +9,43 @@
 
 /* main features */
 
-{% for feature in features_by_category['Protocol Emulation'] -%}
+{% for category_name, category_features in features_by_category.items() if category_name != 'Other Features' -%}
+
+/* {{ category_name }} */
+{% for feature in category_features -%}
+{% if feature in features -%}
 {% if features[feature].is_active -%}
-#define {{ feature }}{{ '           // ' + features[feature].comment if features[feature].comment else '' }}
+#define {{ feature }}{{ ' // ' + features[feature].comment if features[feature].comment else '' }}
 {% else -%}
-// #define {{ feature }}{{ '      // ' + features[feature].comment if features[feature].comment else '' }}
+// #define {{ feature }}{{ ' // ' + features[feature].comment if features[feature].comment else '' }}
 {% endif -%}
-{% endfor %}
-
-{% for feature in features_by_category['Tracking and Time'] -%}
-{% if features[feature].is_active -%}
-#define {{ feature }}
-{% else -%}
-// #define {{ feature }}
 {% endif -%}
-{% endfor %}
+{% endfor -%}
+{% endfor -%}
 
-// #define FEATURE_SATELLITE_TRACKING  // https://github.com/k3ng/k3ng_rotator_controller/wiki/707-Satellite-Tracking
+{% if languages -%}
 
+/* languages */
 {% for language in languages -%}
 {% if languages[language].is_active -%}
 #define {{ language }}         // all languages customized in rotator_language.h
 {% else -%}
 // #define {{ language }}
 {% endif -%}
-{% endfor %}
-
-/* master and remote slave unit functionality */
-{% for feature in features_by_category['Master/Slave'] -%}
-{% if features[feature].is_active -%}
-#define {{ feature }}{{ '       // ' + features[feature].comment if features[feature].comment else '' }}
-{% else -%}
-// #define {{ feature }}{{ '       // ' + features[feature].comment if features[feature].comment else '' }}
+{% endfor -%}
 {% endif -%}
-{% endfor %}
 
-//#define FEATURE_ADC_RESOLUTION12   // 12 bit ADC resolution for Teensy 3.x, Arduino Due Zero MKR families
+{% if 'Other Features' in features_by_category -%}
 
-/* position sensors - pick one for azimuth and one for elevation if using an az/el rotator */
-{% for feature in features_by_category['Position Sensors (Azimuth)'] -%}
-{% if features[feature].is_active -%}
-#define {{ feature }}{{ '   // ' + features[feature].comment if features[feature].comment else '' }}
-{% else -%}
-// #define {{ feature }}{{ '   // ' + features[feature].comment if features[feature].comment else '' }}
-{% endif -%}
-{% endfor %}
-
-{% for feature in features_by_category['Position Sensors (Elevation)'] -%}
+/* other features - uncategorized */
+{% for feature in features_by_category['Other Features'] -%}
 {% if features[feature].is_active -%}
 #define {{ feature }}
 {% else -%}
 // #define {{ feature }}
 {% endif -%}
-{% endfor %}
-
-// And if you are using any display other than a 4 bit LCD, you must also change the feature setting in rotator_k3ngdisplay.h!!!!
-{% for feature in features_by_category['Display'] -%}
-{% if features[feature].is_active -%}
-#define {{ feature }}{{ ' // ' + features[feature].comment if features[feature].comment else '' }}
-{% else -%}
-// #define {{ feature }}{{ ' // ' + features[feature].comment if features[feature].comment else '' }}
+{% endfor -%}
 {% endif -%}
-{% endfor %}
-
-// #define FEATURE_ANALOG_OUTPUT_PINS
-
-// #define FEATURE_SUN_PUSHBUTTON_AZ_EL_CALIBRATION
-// #define FEATURE_MOON_PUSHBUTTON_AZ_EL_CALIBRATION
-
-// #define FEATURE_AUDIBLE_ALERT
-
-/* preset rotary encoder features and options */
-{% for feature in features_by_category['Preset Encoder'] -%}
-{% if features[feature].is_active -%}
-#define {{ feature }}
-{% else -%}
-// #define {{ feature }}
-{% endif -%}
-{% endfor %}
-
-/* rotary encoder features and options */
-{% for feature in features_by_category['Rotary Encoder'] -%}
-{% if features[feature].is_active -%}
-#define {{ feature }}
-{% else -%}
-// #define {{ feature }}
-{% endif -%}
-{% endfor %}
-
-/* I2C devices support */
-{% for feature in features_by_category['I2C'] -%}
-{% if features[feature].is_active -%}
-#define {{ feature }}
-{% else -%}
-// #define {{ feature }}
-{% endif -%}
-{% endfor %}
-
-/* communication features and options */
-{% for feature in features_by_category['Communication'] -%}
-{% if features[feature].is_active -%}
-#define {{ feature }}
-{% else -%}
-// #define {{ feature }}
-{% endif -%}
-{% endfor %}
-
-/* ancillary features and options */
-{% for feature in features_by_category['Ancillary'] -%}
-{% if features[feature].is_active -%}
-#define {{ feature }}
-{% else -%}
-// #define {{ feature }}
-{% endif -%}
-{% endfor %}
 
 /* ---------------------- OPTIONS ---------------------- */
 
@@ -132,4 +55,4 @@
 {% else -%}
 // #define {{ option }}{{ ' // ' + options[option].comment if options[option].comment else '' }}
 {% endif -%}
-{% endfor %}
+{% endfor -%}
