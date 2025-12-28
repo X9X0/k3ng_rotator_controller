@@ -18,6 +18,7 @@ from gui.widgets.pin_configurator import PinConfiguratorWidget
 from gui.widgets.settings_editor import SettingsEditorWidget
 from gui.widgets.serial_console import SerialConsoleWidget
 from gui.widgets.test_runner_widget import TestRunnerWidget
+from gui.widgets.board_selector import BoardSelectorWidget
 from gui.dialogs.export_dialog import ExportDialog
 
 
@@ -140,10 +141,17 @@ class MainWindow(QMainWindow):
         self.content_stack.addWidget(welcome_panel)
         self.panel_indices["Welcome"] = 0
 
+        # Board selector widget
+        self.board_selector = BoardSelectorWidget()
+        self.board_selector.board_selected.connect(self._on_board_selected)
+        self.content_stack.addWidget(self.board_selector)
+        self.panel_indices["Hardware/Board Selection"] = self.content_stack.count() - 1
+
         # Hardware section - Pin configurator
         self.pin_configurator = PinConfiguratorWidget()
         self.pin_configurator.pin_changed.connect(self._on_pin_changed)
         self.content_stack.addWidget(self.pin_configurator)
+        self.panel_indices["Hardware/Pin Configuration"] = self.content_stack.count() - 1
         self.panel_indices["Hardware"] = self.content_stack.count() - 1
 
         # Feature selector
@@ -310,16 +318,21 @@ class MainWindow(QMainWindow):
         item_text = current.text(0)
         parent = current.parent()
 
-        # Determine which panel to show
-        section = parent.text(0) if parent else item_text
+        # Build full path
+        full_path = f"{parent.text(0)}/{item_text}" if parent else item_text
 
-        # Switch to appropriate panel
+        # Try full path first (for child items with dedicated panels)
+        if full_path in self.panel_indices:
+            self.content_stack.setCurrentIndex(self.panel_indices[full_path])
+            self.status_bar.showMessage(f"Viewing: {full_path}")
+            return
+
+        # Fall back to parent section (for parent items or child items without dedicated panels)
+        section = parent.text(0) if parent else item_text
         if section in self.panel_indices:
             self.content_stack.setCurrentIndex(self.panel_indices[section])
             self.status_bar.showMessage(f"Viewing: {section}")
         else:
-            # Child item selected - still show parent's panel
-            full_path = f"{parent.text(0)}/{item_text}" if parent else item_text
             self.status_bar.showMessage(f"Selected: {full_path}")
 
     def _on_feature_changed(self, feature_name: str, is_active: bool):
@@ -364,6 +377,21 @@ class MainWindow(QMainWindow):
         self.validation_label.setText("Validation: Not run")
 
         self.status_bar.showMessage(f"Setting {setting_name} = {new_value}", 3000)
+
+    def _on_board_selected(self, board_id: str):
+        """Handle board selection"""
+        # Get the selected board from board selector
+        board = self.board_selector.get_selected_board()
+
+        if board:
+            # Update status bar
+            self.board_label.setText(f"Board: {board.name}")
+
+            # Update pin configurator with selected board
+            self.pin_configurator.set_board(board)
+
+            # Show status message
+            self.status_bar.showMessage(f"Board selected: {board.name}", 5000)
 
     def _on_serial_connected(self, port: str):
         """Handle serial connection established"""

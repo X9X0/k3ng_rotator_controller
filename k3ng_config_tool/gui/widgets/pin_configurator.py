@@ -9,8 +9,10 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QBrush, QColor
+from typing import Optional
 
 from parsers.pin_parser import PinConfig, PinDefinition
+from boards.board_database import ArduinoBoard
 
 
 class PinItem(QTreeWidgetItem):
@@ -79,6 +81,7 @@ class PinConfiguratorWidget(QWidget):
         self.pin_config = None
         self.pin_items = {}  # pin_name -> PinItem
         self.group_items = {}  # group_name -> QTreeWidgetItem
+        self.selected_board: Optional[ArduinoBoard] = None
 
         self._init_ui()
 
@@ -337,3 +340,11 @@ class PinConfiguratorWidget(QWidget):
             item.update_value(value)
             self.pin_tree.blockSignals(False)
             self._update_statistics()
+
+    def set_board(self, board: ArduinoBoard):
+        """Set the Arduino board for pin validation"""
+        self.selected_board = board
+
+        # Future enhancement: Validate current pins against board capabilities
+        # and highlight any pins that are invalid for the selected board
+        # For now, just store the board reference
