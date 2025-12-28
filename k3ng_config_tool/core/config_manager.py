@@ -19,6 +19,7 @@ from validators.dependency_validator import DependencyValidator, ValidationResul
 from validators.pin_validator import PinValidator
 from validators.value_validator import ValueValidator
 from boards.board_database import BoardDatabase
+from generators.template_engine import TemplateEngine
 
 
 @dataclass
@@ -91,6 +92,7 @@ class ConfigurationManager:
         self.board_db = BoardDatabase()
         self.pin_validator = PinValidator(self.board_db)
         self.value_validator = ValueValidator()
+        self.template_engine = TemplateEngine()
         self._loaded = False
         self._last_validation: Optional[ValidationResult] = None
 
@@ -521,6 +523,88 @@ class ConfigurationManager:
         if not self.board_id:
             return None
         return self.board_db.get_board_summary(self.board_id)
+
+    # Code generation methods
+    def generate_files(self, output_dir: str, suffix: str = '') -> List[str]:
+        """
+        Generate configuration .h files
+
+        Args:
+            output_dir: Directory to write files to
+            suffix: Optional suffix for filenames (e.g., '_custom' or '_backup')
+
+        Returns:
+            List of generated file paths
+        """
+        if not self._loaded:
+            raise RuntimeError("Configuration not loaded. Call load() first.")
+
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+
+        # Generate all files
+        files = self.template_engine.generate_all(
+            self.features_config,
+            self.pins_config,
+            self.settings_config
+        )
+
+        generated_paths = []
+        for filename, content in files.items():
+            # Add suffix if provided
+            if suffix:
+                base_name = filename.replace('.h', '')
+                filename = f"{base_name}{suffix}.h"
+
+            file_path = output_path / filename
+            with open(file_path, 'w') as f:
+                f.write(content)
+
+            generated_paths.append(str(file_path))
+
+        return generated_paths
+
+    def generate_to_project(self, backup: bool = True) -> List[str]:
+        """
+        Generate configuration files back to the project directory
+
+        Args:
+            backup: If True, creates .bak backup files before overwriting
+
+        Returns:
+            List of generated file paths
+        """
+        if not self._loaded:
+            raise RuntimeError("Configuration not loaded. Call load() first.")
+
+        output_dir = self.paths.project_dir / "k3ng_rotator_controller"
+
+        # Create backups if requested
+        if backup:
+            for original_file in [self.paths.features_file, self.paths.pins_file, self.paths.settings_file]:
+                if original_file.exists():
+                    backup_file = Path(str(original_file) + '.bak')
+                    import shutil
+                    shutil.copy2(original_file, backup_file)
+
+        # Generate files
+        return self.generate_files(str(output_dir), suffix='')
+
+    def preview_generation(self) -> Dict[str, str]:
+        """
+        Preview generated configuration files without writing to disk
+
+        Returns:
+            Dict mapping filename -> content
+        """
+        if not self._loaded:
+            raise RuntimeError("Configuration not loaded. Call load() first.")
+
+        return self.template_engine.generate_all(
+            self.features_config,
+            self.pins_config,
+            self.settings_config
+        )
 
 
 if __name__ == "__main__":
