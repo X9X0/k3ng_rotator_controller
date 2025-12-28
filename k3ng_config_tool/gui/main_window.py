@@ -15,6 +15,7 @@ import sys
 from core.config_manager import ConfigurationManager, ConfigurationPaths
 from gui.widgets.feature_selector import FeatureSelectorWidget
 from gui.widgets.pin_configurator import PinConfiguratorWidget
+from gui.widgets.settings_editor import SettingsEditorWidget
 
 
 class MainWindow(QMainWindow):
@@ -147,8 +148,14 @@ class MainWindow(QMainWindow):
         self.content_stack.addWidget(self.feature_selector)
         self.panel_indices["Features"] = self.content_stack.count() - 1
 
+        # Settings editor
+        self.settings_editor = SettingsEditorWidget()
+        self.settings_editor.setting_changed.connect(self._on_setting_changed)
+        self.content_stack.addWidget(self.settings_editor)
+        self.panel_indices["Settings"] = self.content_stack.count() - 1
+
         # Placeholder panels for other sections
-        for section in ["Settings", "Validation", "Testing", "Calibration"]:
+        for section in ["Validation", "Testing", "Calibration"]:
             placeholder = QLabel(f"{section} panel - To be implemented in next phase")
             placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
             placeholder.setStyleSheet("font-size: 14px; color: #666;")
@@ -328,6 +335,20 @@ class MainWindow(QMainWindow):
 
         self.status_bar.showMessage(f"Pin {pin_name} set to {new_value}", 3000)
 
+    def _on_setting_changed(self, setting_name: str, new_value):
+        """Handle setting value change"""
+        # Mark configuration as having unsaved changes
+        self.unsaved_changes = True
+
+        # Update window title to indicate unsaved changes
+        if "*" not in self.windowTitle():
+            self.setWindowTitle(self.windowTitle() + " *")
+
+        # Clear validation status since config changed
+        self.validation_label.setText("Validation: Not run")
+
+        self.status_bar.showMessage(f"Setting {setting_name} = {new_value}", 3000)
+
     def open_project(self):
         """Open a K3NG project directory"""
         directory = QFileDialog.getExistingDirectory(
@@ -365,6 +386,9 @@ class MainWindow(QMainWindow):
 
             # Load pins into pin configurator
             self.pin_configurator.load_pins(self.config_manager.pins_config)
+
+            # Load settings into settings editor
+            self.settings_editor.load_settings(self.config_manager.settings_config)
 
             # Emit signal
             self.configuration_loaded.emit(self.config_manager)
