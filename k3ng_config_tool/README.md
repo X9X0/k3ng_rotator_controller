@@ -18,11 +18,34 @@ Professional Python GUI application for configuring and testing the K3NG rotator
 
 ## Quick Start
 
-### Installation
+### Easy Installation (Recommended)
+
+**Linux / macOS:**
+```bash
+git clone https://github.com/X9X0/k3ng_rotator_controller.git
+cd k3ng_rotator_controller/k3ng_config_tool
+./launch.sh
+```
+
+**Windows:**
+```cmd
+# Clone or download repository, then:
+cd k3ng_rotator_controller\k3ng_config_tool
+launch.bat
+```
+
+The launcher automatically:
+- ✅ Sets up virtual environment
+- ✅ Installs dependencies
+- ✅ Creates global commands (`k3ng-gui`, `k3ng-cli`)
+- ✅ Offers desktop shortcut
+- ✅ Launches the application
+
+### Manual Installation
 
 ```bash
 # Clone repository
-git clone https://github.com/k3ng/k3ng_rotator_controller.git
+git clone https://github.com/X9X0/k3ng_rotator_controller.git
 cd k3ng_rotator_controller/k3ng_config_tool
 
 # Install dependencies

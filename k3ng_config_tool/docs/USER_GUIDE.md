@@ -38,7 +38,72 @@ The K3NG Configuration Tool is a comprehensive Python GUI application for config
 
 ## Installation
 
-### Step 1: Install Python
+### Easy Installation (Recommended)
+
+The easiest way to install and run the K3NG Configuration Tool is using the **automatic launcher**:
+
+#### Linux / macOS
+
+1. **Download or clone the repository**:
+   ```bash
+   git clone https://github.com/X9X0/k3ng_rotator_controller.git
+   cd k3ng_rotator_controller/k3ng_config_tool
+   ```
+
+2. **Run the launcher**:
+   ```bash
+   ./launch.sh
+   ```
+
+   Or double-click `launch.sh` in your file manager.
+
+#### Windows
+
+1. **Download or clone the repository**
+
+2. **Double-click `launch.bat`** in the `k3ng_config_tool` folder
+
+   Or from Command Prompt:
+   ```cmd
+   cd k3ng_rotator_controller\k3ng_config_tool
+   launch.bat
+   ```
+
+#### What the Launcher Does
+
+The launcher automatically:
+- ✅ Checks Python version (requires 3.10+)
+- ✅ Creates virtual environment if needed
+- ✅ Installs all dependencies
+- ✅ Creates global commands (`k3ng-gui`, `k3ng-cli`)
+- ✅ Offers to create desktop shortcut
+- ✅ Prompts you to launch GUI or CLI
+
+**First run may take a few minutes while dependencies install.**
+
+#### After First Run
+
+Once setup is complete, you can launch the tool using:
+
+**GUI (Graphical Interface)**:
+```bash
+k3ng-gui
+```
+
+**CLI (Command Line)**:
+```bash
+k3ng-cli --help
+```
+
+Or simply run `./launch.sh` (Linux/macOS) or `launch.bat` (Windows) again.
+
+---
+
+### Manual Installation (Advanced)
+
+If you prefer manual installation or the launcher doesn't work:
+
+#### Step 1: Install Python
 
 Download and install Python 3.10+ from [python.org](https://www.python.org/downloads/)
 
@@ -47,26 +112,33 @@ Verify installation:
 python3 --version
 ```
 
-### Step 2: Install Dependencies
+#### Step 2: Create Virtual Environment (Optional but Recommended)
 
-Navigate to the tool directory:
 ```bash
 cd k3ng_rotator_controller/k3ng_config_tool
+python3 -m venv venv
+
+# Activate virtual environment
+# Linux/macOS:
+source venv/bin/activate
+# Windows:
+venv\Scripts\activate
 ```
 
-Install required packages:
+#### Step 3: Install Dependencies
+
 ```bash
 pip install -r requirements.txt
 ```
 
-### Step 3: Launch the Application
+#### Step 4: Launch the Application
 
-#### GUI Mode (Recommended)
+**GUI Mode (Recommended)**:
 ```bash
 python3 gui_main.py
 ```
 
-#### CLI Mode (Advanced)
+**CLI Mode (Advanced)**:
 ```bash
 python3 main.py --help
 ```
