@@ -17,6 +17,7 @@ from gui.widgets.feature_selector import FeatureSelectorWidget
 from gui.widgets.pin_configurator import PinConfiguratorWidget
 from gui.widgets.settings_editor import SettingsEditorWidget
 from gui.widgets.serial_console import SerialConsoleWidget
+from gui.dialogs.export_dialog import ExportDialog
 
 
 class MainWindow(QMainWindow):
@@ -186,7 +187,7 @@ class MainWindow(QMainWindow):
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
 
-        subtitle = QLabel("Phase 4 - GUI Foundation")
+        subtitle = QLabel("Phase 6 - Code Generation")
         subtitle.setStyleSheet("font-size: 16px; color: #666; margin-bottom: 40px;")
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(subtitle)
@@ -535,29 +536,14 @@ class MainWindow(QMainWindow):
             )
             return
 
-        # Show dialog with options
-        msg = QMessageBox(self)
-        msg.setIcon(QMessageBox.Icon.Question)
-        msg.setWindowTitle("Generate Configuration Files")
-        msg.setText("Where would you like to generate the configuration files?")
+        # Open export dialog
+        dialog = ExportDialog(self.config_manager, self)
+        dialog.export_completed.connect(self._on_export_completed)
+        dialog.exec()
 
-        # Add buttons
-        to_project_btn = msg.addButton("To Project (with backup)", QMessageBox.ButtonRole.AcceptRole)
-        to_custom_btn = msg.addButton("To Custom Directory", QMessageBox.ButtonRole.AcceptRole)
-        cancel_btn = msg.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
-
-        msg.exec()
-
-        clicked = msg.clickedButton()
-
-        if clicked == cancel_btn:
-            return
-        elif clicked == to_project_btn:
-            # Generate to project directory (same as save)
-            self.save_configuration()
-        elif clicked == to_custom_btn:
-            # Generate to custom directory (same as save as)
-            self.save_configuration_as()
+    def _on_export_completed(self, result):
+        """Handle export completion"""
+        self.status_bar.showMessage(f"Export completed: {len(result.files_written)} files written", 5000)
 
     def validate_configuration(self):
         """Validate the current configuration"""
