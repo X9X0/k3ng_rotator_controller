@@ -1,0 +1,68 @@
+{
+  "board_name": "Arduino Uno",
+  "board_id": "arduino_uno",
+  "mcu": "ATmega328P",
+  "family": "avr",
+  "description": "Arduino Uno R3 - Most common Arduino board",
+  "memory": {
+    "flash_kb": 32,
+    "sram_kb": 2,
+    "eeprom_kb": 1
+  },
+  "pins": {
+    "digital": {
+      "count": 14,
+      "range": [0, 13]
+    },
+    "analog": {
+      "count": 6,
+      "names": ["A0", "A1", "A2", "A3", "A4", "A5"],
+      "digital_equivalent": [14, 15, 16, 17, 18, 19]
+    },
+    "pwm": [3, 5, 6, 9, 10, 11],
+    "interrupt": {
+      "2": 0,
+      "3": 1
+    },
+    "i2c": {
+      "sda": "A4",
+      "scl": "A5"
+    },
+    "spi": {
+      "mosi": 11,
+      "miso": 12,
+      "sck": 13,
+      "ss": 10
+    },
+    "serial": [
+      {
+        "rx": 0,
+        "tx": 1,
+        "name": "Serial",
+        "class": "HardwareSerial"
+      }
+    ]
+  },
+  "capabilities": {
+    "max_analog_resolution": 10,
+    "analog_reference_options": ["DEFAULT", "INTERNAL", "EXTERNAL"],
+    "timer_count": 3,
+    "uart_count": 1,
+    "i2c_count": 1,
+    "spi_count": 1
+  },
+  "validation_rules": {
+    "pulse_input_pins": "interrupt",
+    "incremental_encoder_pins": "interrupt",
+    "pwm_output_pins": "pwm",
+    "i2c_reserved": ["A4", "A5"],
+    "spi_reserved": [10, 11, 12, 13],
+    "serial_reserved": [0, 1]
+  },
+  "notes": [
+    "Limited memory - may not support all features simultaneously",
+    "Only 2 interrupt pins - limits pulse input and encoder options",
+    "Pin 13 has onboard LED - may interfere with some uses"
+  ],
+  "recommended_for": "Basic azimuth-only systems with analog or single encoder positioning"
+}

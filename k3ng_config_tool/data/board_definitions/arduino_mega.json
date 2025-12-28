@@ -1,0 +1,91 @@
+{
+  "board_name": "Arduino Mega 2560",
+  "board_id": "arduino_mega_2560",
+  "mcu": "ATmega2560",
+  "family": "avr",
+  "description": "Arduino Mega 2560 - Recommended for full-featured systems",
+  "memory": {
+    "flash_kb": 256,
+    "sram_kb": 8,
+    "eeprom_kb": 4
+  },
+  "pins": {
+    "digital": {
+      "count": 54,
+      "range": [0, 53]
+    },
+    "analog": {
+      "count": 16,
+      "names": ["A0", "A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "A11", "A12", "A13", "A14", "A15"],
+      "digital_equivalent": [54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69]
+    },
+    "pwm": [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 44, 45, 46],
+    "interrupt": {
+      "2": 0,
+      "3": 1,
+      "18": 5,
+      "19": 4,
+      "20": 3,
+      "21": 2
+    },
+    "i2c": {
+      "sda": 20,
+      "scl": 21
+    },
+    "spi": {
+      "mosi": 51,
+      "miso": 50,
+      "sck": 52,
+      "ss": 53
+    },
+    "serial": [
+      {
+        "rx": 0,
+        "tx": 1,
+        "name": "Serial",
+        "class": "HardwareSerial"
+      },
+      {
+        "rx": 19,
+        "tx": 18,
+        "name": "Serial1",
+        "class": "HardwareSerial"
+      },
+      {
+        "rx": 17,
+        "tx": 16,
+        "name": "Serial2",
+        "class": "HardwareSerial"
+      },
+      {
+        "rx": 15,
+        "tx": 14,
+        "name": "Serial3",
+        "class": "HardwareSerial"
+      }
+    ]
+  },
+  "capabilities": {
+    "max_analog_resolution": 10,
+    "analog_reference_options": ["DEFAULT", "INTERNAL1V1", "INTERNAL2V56", "EXTERNAL"],
+    "timer_count": 6,
+    "uart_count": 4,
+    "i2c_count": 1,
+    "spi_count": 1
+  },
+  "validation_rules": {
+    "pulse_input_pins": "interrupt",
+    "incremental_encoder_pins": "interrupt",
+    "pwm_output_pins": "pwm",
+    "i2c_reserved": [20, 21],
+    "spi_reserved": [50, 51, 52, 53],
+    "serial_reserved": [0, 1, 14, 15, 16, 17, 18, 19]
+  },
+  "notes": [
+    "Recommended board for full-featured K3NG systems",
+    "Plenty of memory for all features including satellite tracking",
+    "6 interrupt pins support multiple encoders and pulse inputs",
+    "4 hardware serial ports support GPS, Nextion, and remote units"
+  ],
+  "recommended_for": "Full AZ/EL systems with tracking, GPS, displays, and advanced features"
+}

@@ -16,6 +16,8 @@ from parsers.feature_parser import FeatureParser, FeatureConfig
 from parsers.pin_parser import PinParser, PinConfig
 from parsers.settings_parser import SettingsParser, SettingsConfig
 from validators.dependency_validator import DependencyValidator, ValidationResult
+from validators.pin_validator import PinValidator
+from boards.board_database import BoardDatabase
 
 
 @dataclass
@@ -70,18 +72,23 @@ class ConfigurationManager:
     - Exporting configuration
     """
 
-    def __init__(self, paths: ConfigurationPaths):
+    def __init__(self, paths: ConfigurationPaths, board_id: Optional[str] = None):
         """
         Initialize configuration manager
 
         Args:
             paths: Paths to configuration files
+            board_id: Arduino board identifier (e.g., 'arduino_mega_2560')
+                     If None, pin validation will be skipped
         """
         self.paths = paths
+        self.board_id = board_id
         self.features_config: Optional[FeatureConfig] = None
         self.pins_config: Optional[PinConfig] = None
         self.settings_config: Optional[SettingsConfig] = None
         self.validator = DependencyValidator()
+        self.board_db = BoardDatabase()
+        self.pin_validator = PinValidator(self.board_db)
         self._loaded = False
         self._last_validation: Optional[ValidationResult] = None
 
@@ -359,9 +366,13 @@ class ConfigurationManager:
         self.import_from_dict(data)
 
     # Validation methods
-    def validate(self) -> ValidationResult:
+    def validate(self, board_id: Optional[str] = None) -> ValidationResult:
         """
         Validate current configuration
+
+        Args:
+            board_id: Arduino board identifier for pin validation
+                     (overrides constructor board_id if provided)
 
         Returns:
             ValidationResult with errors, warnings, and auto-fix suggestions
@@ -369,10 +380,35 @@ class ConfigurationManager:
         if not self._loaded:
             raise RuntimeError("Configuration not loaded. Call load() first.")
 
+        # Run dependency validation
         result = self.validator.validate(
             self.features_config.active_features,
             self.features_config.active_options
         )
+
+        # Run pin validation if board is specified
+        board = board_id or self.board_id
+        if board:
+            # Build pin assignments dict from pins_config
+            pin_assignments = {
+                name: pin.pin_string
+                for name, pin in self.pins_config.pins.items()
+            }
+
+            pin_result = self.pin_validator.validate(
+                board,
+                pin_assignments,
+                self.features_config.active_features
+            )
+
+            # Merge pin validation results into main result
+            result.errors.extend(pin_result.errors)
+            result.warnings.extend(pin_result.warnings)
+            result.info.extend(pin_result.info)
+
+            # Update passed status
+            if not pin_result.passed:
+                result.passed = False
 
         self._last_validation = result
         return result
@@ -424,6 +460,48 @@ class ConfigurationManager:
             Dict with requirement information
         """
         return self.validator.explain_feature_requirements(feature_name)
+
+    # Board management methods
+    def set_board(self, board_id: str):
+        """
+        Set Arduino board for pin validation
+
+        Args:
+            board_id: Board identifier (e.g., 'arduino_mega_2560')
+        """
+        board = self.board_db.get_board(board_id)
+        if not board:
+            raise ValueError(f"Unknown board: {board_id}")
+        self.board_id = board_id
+
+    def get_board(self) -> Optional[str]:
+        """
+        Get currently selected board
+
+        Returns:
+            Board identifier or None
+        """
+        return self.board_id
+
+    def list_boards(self) -> List[Dict[str, str]]:
+        """
+        List available Arduino boards
+
+        Returns:
+            List of board info dicts
+        """
+        return self.board_db.list_boards()
+
+    def get_board_summary(self) -> Optional[Dict[str, Any]]:
+        """
+        Get summary of currently selected board
+
+        Returns:
+            Board summary dict or None if no board selected
+        """
+        if not self.board_id:
+            return None
+        return self.board_db.get_board_summary(self.board_id)
 
 
 if __name__ == "__main__":
