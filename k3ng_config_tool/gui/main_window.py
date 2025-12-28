@@ -16,6 +16,7 @@ from core.config_manager import ConfigurationManager, ConfigurationPaths
 from gui.widgets.feature_selector import FeatureSelectorWidget
 from gui.widgets.pin_configurator import PinConfiguratorWidget
 from gui.widgets.settings_editor import SettingsEditorWidget
+from gui.widgets.serial_console import SerialConsoleWidget
 
 
 class MainWindow(QMainWindow):
@@ -95,6 +96,7 @@ class MainWindow(QMainWindow):
                 "Other"
             ]),
             ("Validation", []),
+            ("Serial Console", []),
             ("Testing", [
                 "I/O Tests",
                 "Motor Tests",
@@ -153,6 +155,13 @@ class MainWindow(QMainWindow):
         self.settings_editor.setting_changed.connect(self._on_setting_changed)
         self.content_stack.addWidget(self.settings_editor)
         self.panel_indices["Settings"] = self.content_stack.count() - 1
+
+        # Serial console
+        self.serial_console = SerialConsoleWidget()
+        self.serial_console.connected.connect(self._on_serial_connected)
+        self.serial_console.disconnected.connect(self._on_serial_disconnected)
+        self.content_stack.addWidget(self.serial_console)
+        self.panel_indices["Serial Console"] = self.content_stack.count() - 1
 
         # Placeholder panels for other sections
         for section in ["Validation", "Testing", "Calibration"]:
@@ -348,6 +357,14 @@ class MainWindow(QMainWindow):
         self.validation_label.setText("Validation: Not run")
 
         self.status_bar.showMessage(f"Setting {setting_name} = {new_value}", 3000)
+
+    def _on_serial_connected(self, port: str):
+        """Handle serial connection established"""
+        self.status_bar.showMessage(f"Connected to {port}", 5000)
+
+    def _on_serial_disconnected(self):
+        """Handle serial disconnection"""
+        self.status_bar.showMessage("Disconnected from serial port", 3000)
 
     def open_project(self):
         """Open a K3NG project directory"""
@@ -588,9 +605,9 @@ class MainWindow(QMainWindow):
             self,
             "About K3NG Configuration Tool",
             "<h3>K3NG Rotator Configuration & Testing Utility</h3>"
-            "<p>Phase 4 - GUI Foundation</p>"
+            "<p>Phase 5 - Serial Communication</p>"
             "<p>A comprehensive tool for configuring and testing K3NG rotator controllers.</p>"
-            "<p>Built with PyQt6</p>"
+            "<p>Built with PyQt6 and PySerial</p>"
         )
 
     def closeEvent(self, event):
@@ -607,5 +624,9 @@ class MainWindow(QMainWindow):
             if reply == QMessageBox.StandardButton.No:
                 event.ignore()
                 return
+
+        # Cleanup serial console
+        if hasattr(self, 'serial_console'):
+            self.serial_console.cleanup()
 
         event.accept()
