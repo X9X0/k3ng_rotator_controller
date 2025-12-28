@@ -414,13 +414,99 @@ class MainWindow(QMainWindow):
             )
             return
 
-        # TODO: Implement save functionality
-        self.status_bar.showMessage("Save configuration (not yet implemented)", 3000)
+        # Confirm save
+        reply = QMessageBox.question(
+            self,
+            "Save Configuration",
+            "This will generate configuration files back to the project directory.\n"
+            "Backup files (.bak) will be created automatically.\n\n"
+            "Continue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes
+        )
+
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        try:
+            # Generate files with backup
+            generated_files = self.config_manager.generate_to_project(backup=True)
+
+            # Clear unsaved changes
+            self.unsaved_changes = False
+            self.setWindowTitle("K3NG Rotator Configuration Tool")
+
+            # Update status
+            self.status_bar.showMessage("Configuration saved successfully", 5000)
+
+            # Show success dialog
+            files_list = "\n".join([f"  • {f.name}" for f in generated_files[:5]])
+            if len(generated_files) > 5:
+                files_list += f"\n  ... and {len(generated_files) - 5} more"
+
+            QMessageBox.information(
+                self,
+                "Save Successful",
+                f"Configuration files generated successfully:\n\n{files_list}\n\n"
+                f"Backup files (.bak) have been created."
+            )
+
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Save Error",
+                f"Failed to save configuration:\n\n{str(e)}"
+            )
+            self.status_bar.showMessage("Save failed", 3000)
 
     def save_configuration_as(self):
         """Save configuration to a new location"""
-        # TODO: Implement save as functionality
-        self.status_bar.showMessage("Save as (not yet implemented)", 3000)
+        if not self.config_manager:
+            QMessageBox.warning(
+                self,
+                "No Project",
+                "No project loaded. Use 'Open Project' first."
+            )
+            return
+
+        # Get output directory
+        directory = QFileDialog.getExistingDirectory(
+            self,
+            "Select Output Directory",
+            str(Path.home()),
+            QFileDialog.Option.ShowDirsOnly
+        )
+
+        if not directory:
+            return
+
+        output_dir = Path(directory)
+
+        try:
+            # Generate files to custom directory
+            generated_files = self.config_manager.generate_files(str(output_dir))
+
+            # Update status
+            self.status_bar.showMessage(f"Configuration saved to {output_dir}", 5000)
+
+            # Show success dialog
+            files_list = "\n".join([f"  • {f.name}" for f in generated_files[:5]])
+            if len(generated_files) > 5:
+                files_list += f"\n  ... and {len(generated_files) - 5} more"
+
+            QMessageBox.information(
+                self,
+                "Save As Successful",
+                f"Configuration files generated to:\n{output_dir}\n\n{files_list}"
+            )
+
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Save As Error",
+                f"Failed to save configuration:\n\n{str(e)}"
+            )
+            self.status_bar.showMessage("Save as failed", 3000)
 
     def generate_files(self):
         """Generate configuration .h files"""
@@ -432,8 +518,29 @@ class MainWindow(QMainWindow):
             )
             return
 
-        # TODO: Implement generate dialog
-        self.status_bar.showMessage("Generate files (not yet implemented)", 3000)
+        # Show dialog with options
+        msg = QMessageBox(self)
+        msg.setIcon(QMessageBox.Icon.Question)
+        msg.setWindowTitle("Generate Configuration Files")
+        msg.setText("Where would you like to generate the configuration files?")
+
+        # Add buttons
+        to_project_btn = msg.addButton("To Project (with backup)", QMessageBox.ButtonRole.AcceptRole)
+        to_custom_btn = msg.addButton("To Custom Directory", QMessageBox.ButtonRole.AcceptRole)
+        cancel_btn = msg.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+
+        msg.exec()
+
+        clicked = msg.clickedButton()
+
+        if clicked == cancel_btn:
+            return
+        elif clicked == to_project_btn:
+            # Generate to project directory (same as save)
+            self.save_configuration()
+        elif clicked == to_custom_btn:
+            # Generate to custom directory (same as save as)
+            self.save_configuration_as()
 
     def validate_configuration(self):
         """Validate the current configuration"""
