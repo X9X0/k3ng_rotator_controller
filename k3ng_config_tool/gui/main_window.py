@@ -14,6 +14,7 @@ import sys
 
 from core.config_manager import ConfigurationManager, ConfigurationPaths
 from gui.widgets.feature_selector import FeatureSelectorWidget
+from gui.widgets.pin_configurator import PinConfiguratorWidget
 
 
 class MainWindow(QMainWindow):
@@ -134,14 +135,20 @@ class MainWindow(QMainWindow):
         self.content_stack.addWidget(welcome_panel)
         self.panel_indices["Welcome"] = 0
 
-        # Feature selector panels
+        # Hardware section - Pin configurator
+        self.pin_configurator = PinConfiguratorWidget()
+        self.pin_configurator.pin_changed.connect(self._on_pin_changed)
+        self.content_stack.addWidget(self.pin_configurator)
+        self.panel_indices["Hardware"] = self.content_stack.count() - 1
+
+        # Feature selector
         self.feature_selector = FeatureSelectorWidget()
         self.feature_selector.feature_changed.connect(self._on_feature_changed)
         self.content_stack.addWidget(self.feature_selector)
         self.panel_indices["Features"] = self.content_stack.count() - 1
 
         # Placeholder panels for other sections
-        for section in ["Hardware", "Settings", "Validation", "Testing", "Calibration"]:
+        for section in ["Settings", "Validation", "Testing", "Calibration"]:
             placeholder = QLabel(f"{section} panel - To be implemented in next phase")
             placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
             placeholder.setStyleSheet("font-size: 14px; color: #666;")
@@ -307,6 +314,20 @@ class MainWindow(QMainWindow):
         status = "enabled" if is_active else "disabled"
         self.status_bar.showMessage(f"Feature {feature_name} {status}", 3000)
 
+    def _on_pin_changed(self, pin_name: str, new_value: str):
+        """Handle pin value change"""
+        # Mark configuration as having unsaved changes
+        self.unsaved_changes = True
+
+        # Update window title to indicate unsaved changes
+        if "*" not in self.windowTitle():
+            self.setWindowTitle(self.windowTitle() + " *")
+
+        # Clear validation status since config changed
+        self.validation_label.setText("Validation: Not run")
+
+        self.status_bar.showMessage(f"Pin {pin_name} set to {new_value}", 3000)
+
     def open_project(self):
         """Open a K3NG project directory"""
         directory = QFileDialog.getExistingDirectory(
@@ -341,6 +362,9 @@ class MainWindow(QMainWindow):
 
             # Load features into feature selector
             self.feature_selector.load_features(self.config_manager.features_config)
+
+            # Load pins into pin configurator
+            self.pin_configurator.load_pins(self.config_manager.pins_config)
 
             # Emit signal
             self.configuration_loaded.emit(self.config_manager)
