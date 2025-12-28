@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from parsers.feature_parser import FeatureParser, FeatureConfig
 from parsers.pin_parser import PinParser, PinConfig
 from parsers.settings_parser import SettingsParser, SettingsConfig
+from validators.dependency_validator import DependencyValidator, ValidationResult
 
 
 @dataclass
@@ -80,7 +81,9 @@ class ConfigurationManager:
         self.features_config: Optional[FeatureConfig] = None
         self.pins_config: Optional[PinConfig] = None
         self.settings_config: Optional[SettingsConfig] = None
+        self.validator = DependencyValidator()
         self._loaded = False
+        self._last_validation: Optional[ValidationResult] = None
 
     def load(self) -> bool:
         """
@@ -354,6 +357,73 @@ class ConfigurationManager:
         with open(file_path, 'r') as f:
             data = json.load(f)
         self.import_from_dict(data)
+
+    # Validation methods
+    def validate(self) -> ValidationResult:
+        """
+        Validate current configuration
+
+        Returns:
+            ValidationResult with errors, warnings, and auto-fix suggestions
+        """
+        if not self._loaded:
+            raise RuntimeError("Configuration not loaded. Call load() first.")
+
+        result = self.validator.validate(
+            self.features_config.active_features,
+            self.features_config.active_options
+        )
+
+        self._last_validation = result
+        return result
+
+    def get_validation_summary(self) -> Dict[str, Any]:
+        """
+        Get validation summary
+
+        Returns:
+            Dict with validation statistics
+        """
+        if self._last_validation is None:
+            self.validate()
+
+        return {
+            'passed': self._last_validation.passed,
+            'error_count': len(self._last_validation.errors),
+            'warning_count': len(self._last_validation.warnings),
+            'info_count': len(self._last_validation.info),
+            'auto_fixes_available': len(self._last_validation.auto_fixes)
+        }
+
+    def apply_auto_fixes(self) -> int:
+        """
+        Apply auto-fix suggestions from last validation
+
+        Returns:
+            Number of features auto-enabled
+        """
+        if self._last_validation is None:
+            self.validate()
+
+        count = 0
+        for feature in self._last_validation.auto_fixes:
+            if feature in self.features_config.features:
+                self.enable_feature(feature)
+                count += 1
+
+        return count
+
+    def explain_feature(self, feature_name: str) -> Dict[str, Any]:
+        """
+        Explain requirements and dependencies for a feature
+
+        Args:
+            feature_name: Feature to explain
+
+        Returns:
+            Dict with requirement information
+        """
+        return self.validator.explain_feature_requirements(feature_name)
 
 
 if __name__ == "__main__":
