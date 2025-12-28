@@ -13,6 +13,7 @@ from pathlib import Path
 import sys
 
 from core.config_manager import ConfigurationManager, ConfigurationPaths
+from gui.widgets.feature_selector import FeatureSelectorWidget
 
 
 class MainWindow(QMainWindow):
@@ -125,15 +126,27 @@ class MainWindow(QMainWindow):
 
     def _create_content_panels(self):
         """Create content panels for the stacked widget"""
+        # Keep track of panel indices
+        self.panel_indices = {}
+
         # Welcome panel (index 0)
         welcome_panel = self._create_welcome_panel()
         self.content_stack.addWidget(welcome_panel)
+        self.panel_indices["Welcome"] = 0
 
-        # Placeholder panels for now - will be replaced with actual widgets
-        for i in range(20):  # Add placeholder panels
-            placeholder = QLabel(f"Panel {i+1} - To be implemented")
+        # Feature selector panels
+        self.feature_selector = FeatureSelectorWidget()
+        self.feature_selector.feature_changed.connect(self._on_feature_changed)
+        self.content_stack.addWidget(self.feature_selector)
+        self.panel_indices["Features"] = self.content_stack.count() - 1
+
+        # Placeholder panels for other sections
+        for section in ["Hardware", "Settings", "Validation", "Testing", "Calibration"]:
+            placeholder = QLabel(f"{section} panel - To be implemented in next phase")
             placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            placeholder.setStyleSheet("font-size: 14px; color: #666;")
             self.content_stack.addWidget(placeholder)
+            self.panel_indices[section] = self.content_stack.count() - 1
 
         # Show welcome panel by default
         self.content_stack.setCurrentIndex(0)
@@ -267,14 +280,32 @@ class MainWindow(QMainWindow):
         item_text = current.text(0)
         parent = current.parent()
 
-        if parent:
-            full_path = f"{parent.text(0)}/{item_text}"
-        else:
-            full_path = item_text
+        # Determine which panel to show
+        section = parent.text(0) if parent else item_text
 
-        # For now, just show placeholder
-        # TODO: Map navigation items to actual widget panels
-        self.status_bar.showMessage(f"Selected: {full_path}")
+        # Switch to appropriate panel
+        if section in self.panel_indices:
+            self.content_stack.setCurrentIndex(self.panel_indices[section])
+            self.status_bar.showMessage(f"Viewing: {section}")
+        else:
+            # Child item selected - still show parent's panel
+            full_path = f"{parent.text(0)}/{item_text}" if parent else item_text
+            self.status_bar.showMessage(f"Selected: {full_path}")
+
+    def _on_feature_changed(self, feature_name: str, is_active: bool):
+        """Handle feature checkbox change"""
+        # Mark configuration as having unsaved changes
+        self.unsaved_changes = True
+
+        # Update window title to indicate unsaved changes
+        if "*" not in self.windowTitle():
+            self.setWindowTitle(self.windowTitle() + " *")
+
+        # Clear validation status since config changed
+        self.validation_label.setText("Validation: Not run")
+
+        status = "enabled" if is_active else "disabled"
+        self.status_bar.showMessage(f"Feature {feature_name} {status}", 3000)
 
     def open_project(self):
         """Open a K3NG project directory"""
@@ -307,6 +338,9 @@ class MainWindow(QMainWindow):
             self.project_dir = project_dir
             self.project_label.setText(f"Project: {project_dir.name}")
             self.status_bar.showMessage(f"Loaded project from {project_dir}", 5000)
+
+            # Load features into feature selector
+            self.feature_selector.load_features(self.config_manager.features_config)
 
             # Emit signal
             self.configuration_loaded.emit(self.config_manager)
