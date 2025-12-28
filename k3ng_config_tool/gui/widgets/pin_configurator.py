@@ -128,7 +128,36 @@ class PinConfiguratorWidget(QWidget):
         self.pin_tree.setColumnWidth(1, 100)
         self.pin_tree.setColumnWidth(2, 400)
         self.pin_tree.itemChanged.connect(self._on_item_changed)
-        layout.addWidget(self.pin_tree)
+
+        # Add placeholder message for empty state
+        self.empty_message = QLabel(
+            "📁 No project loaded\n\n"
+            "To configure pins:\n"
+            "1. Click File → Open Project\n"
+            "2. Select your K3NG rotator controller directory\n"
+            "3. Pins will be loaded automatically"
+        )
+        self.empty_message.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.empty_message.setStyleSheet("""
+            QLabel {
+                color: #666;
+                font-size: 14px;
+                padding: 40px;
+                background-color: #f9f9f9;
+                border: 2px dashed #ccc;
+                border-radius: 8px;
+            }
+        """)
+        self.empty_message.setWordWrap(True)
+
+        # Stack layout to switch between empty message and tree
+        from PyQt6.QtWidgets import QStackedWidget
+        self.pin_stack = QStackedWidget()
+        self.pin_stack.addWidget(self.empty_message)  # Index 0
+        self.pin_stack.addWidget(self.pin_tree)       # Index 1
+        self.pin_stack.setCurrentIndex(0)  # Show empty message by default
+
+        layout.addWidget(self.pin_stack)
 
         # Help text
         help_text = QLabel(
@@ -180,6 +209,9 @@ class PinConfiguratorWidget(QWidget):
 
         # Update statistics
         self._update_statistics()
+
+        # Switch to tree view (hide empty message)
+        self.pin_stack.setCurrentIndex(1)
 
         # Emit loaded signal
         self.pins_loaded.emit()
