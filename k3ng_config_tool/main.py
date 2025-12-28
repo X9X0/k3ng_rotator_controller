@@ -298,6 +298,77 @@ def cmd_validate(args):
     return 0 if result.passed else 1
 
 
+def cmd_generate(args):
+    """Generate configuration files"""
+    print(f"Generating configuration files from: {args.project_dir}\n")
+
+    paths = ConfigurationPaths.from_project_dir(args.project_dir)
+    manager = ConfigurationManager(paths)
+
+    if not manager.load():
+        print("❌ Failed to load configuration")
+        return 1
+
+    print("✅ Configuration loaded successfully\n")
+
+    # Determine output directory
+    if args.output:
+        output_dir = args.output
+    elif args.suffix:
+        output_dir = paths.project_dir / "k3ng_rotator_controller"
+    else:
+        output_dir = paths.project_dir / "k3ng_rotator_controller"
+
+    print("=" * 60)
+    print("GENERATING CONFIGURATION FILES")
+    print("=" * 60)
+
+    # Run validation first unless --no-validate is set
+    if not args.no_validate:
+        print("\nValidating configuration before generation...")
+        result = manager.validate(args.board if hasattr(args, 'board') else None)
+
+        if not result.passed:
+            print(f"⚠️  Configuration has {len(result.errors)} error(s)")
+            for i, error in enumerate(result.errors[:3], 1):
+                print(f"  {i}. {error.message}")
+            if len(result.errors) > 3:
+                print(f"  ... and {len(result.errors) - 3} more errors")
+
+            if not args.force:
+                print("\n❌ Generation aborted due to validation errors.")
+                print("   Use --force to generate anyway, or fix errors first.")
+                return 1
+            else:
+                print("\n⚠️  Proceeding with generation despite errors (--force)")
+        else:
+            print("✅ Validation passed")
+
+    print()
+
+    try:
+        # Generate files
+        if args.output:
+            # Generate to custom directory
+            generated_paths = manager.generate_files(output_dir, suffix=args.suffix or '')
+        else:
+            # Generate back to project (with backup)
+            generated_paths = manager.generate_to_project(backup=not args.no_backup)
+
+        print("✅ Files generated successfully:\n")
+        for path in generated_paths:
+            print(f"  • {path}")
+
+        if not args.no_backup and not args.output:
+            print("\n💾 Backup files created (.bak)")
+
+        return 0
+
+    except Exception as e:
+        print(f"\n❌ Generation failed: {e}")
+        return 1
+
+
 def main():
     """Main entry point"""
     parser = argparse.ArgumentParser(
@@ -339,6 +410,16 @@ def main():
     parser_validate.add_argument('--board', help='Arduino board for pin validation (e.g., arduino_mega_2560)')
     parser_validate.add_argument('--apply-fixes', action='store_true', help='Apply auto-fixes automatically')
 
+    # Generate command
+    parser_generate = subparsers.add_parser('generate', help='Generate configuration .h files')
+    parser_generate.add_argument('project_dir', help='Path to K3NG project directory')
+    parser_generate.add_argument('-o', '--output', help='Custom output directory')
+    parser_generate.add_argument('--suffix', help='Filename suffix (e.g., _custom)')
+    parser_generate.add_argument('--board', help='Arduino board for validation (e.g., arduino_mega_2560)')
+    parser_generate.add_argument('--no-validate', action='store_true', help='Skip validation before generation')
+    parser_generate.add_argument('--no-backup', action='store_true', help='Skip backup file creation')
+    parser_generate.add_argument('--force', action='store_true', help='Generate despite validation errors')
+
     args = parser.parse_args()
 
     # Print banner
@@ -359,6 +440,8 @@ def main():
         return cmd_boards(args)
     elif args.command == 'validate':
         return cmd_validate(args)
+    elif args.command == 'generate':
+        return cmd_generate(args)
     else:
         parser.print_help()
         return 0
