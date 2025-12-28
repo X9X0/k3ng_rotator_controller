@@ -101,6 +101,15 @@ class BoardDatabase:
             for board in self.boards.values()
         ]
 
+    def get_all_boards(self) -> List[BoardDefinition]:
+        """
+        Get all board definitions
+
+        Returns:
+            List of BoardDefinition objects
+        """
+        return list(self.boards.values())
+
     def get_board(self, board_id: str) -> Optional[BoardDefinition]:
         """
         Get board definition by ID

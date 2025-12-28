@@ -385,13 +385,13 @@ class MainWindow(QMainWindow):
 
         if board:
             # Update status bar
-            self.board_label.setText(f"Board: {board.name}")
+            self.board_label.setText(f"Board: {board.board_name}")
 
             # Update pin configurator with selected board
             self.pin_configurator.set_board(board)
 
             # Show status message
-            self.status_bar.showMessage(f"Board selected: {board.name}", 5000)
+            self.status_bar.showMessage(f"Board selected: {board.board_name}", 5000)
 
     def _on_serial_connected(self, port: str):
         """Handle serial connection established"""
