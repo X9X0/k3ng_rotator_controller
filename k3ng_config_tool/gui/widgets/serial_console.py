@@ -11,8 +11,8 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QTextCursor, QColor, QTextCharFormat
 from datetime import datetime
 
-from serial.serial_manager import SerialManager, SerialPort
-from serial.command_interface import K3NGCommandInterface
+from k3ng_serial.serial_manager import SerialManager, SerialPort
+from k3ng_serial.command_interface import K3NGCommandInterface
 
 
 class SerialConsoleWidget(QWidget):
