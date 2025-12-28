@@ -17,6 +17,7 @@ from gui.widgets.feature_selector import FeatureSelectorWidget
 from gui.widgets.pin_configurator import PinConfiguratorWidget
 from gui.widgets.settings_editor import SettingsEditorWidget
 from gui.widgets.serial_console import SerialConsoleWidget
+from gui.widgets.test_runner_widget import TestRunnerWidget
 from gui.dialogs.export_dialog import ExportDialog
 
 
@@ -164,8 +165,13 @@ class MainWindow(QMainWindow):
         self.content_stack.addWidget(self.serial_console)
         self.panel_indices["Serial Console"] = self.content_stack.count() - 1
 
+        # Test runner widget
+        self.test_runner = TestRunnerWidget()
+        self.content_stack.addWidget(self.test_runner)
+        self.panel_indices["Testing"] = self.content_stack.count() - 1
+
         # Placeholder panels for other sections
-        for section in ["Validation", "Testing", "Calibration"]:
+        for section in ["Validation", "Calibration"]:
             placeholder = QLabel(f"{section} panel - To be implemented in next phase")
             placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
             placeholder.setStyleSheet("font-size: 14px; color: #666;")
@@ -187,7 +193,7 @@ class MainWindow(QMainWindow):
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
 
-        subtitle = QLabel("Phase 6 - Code Generation")
+        subtitle = QLabel("Phase 7 - Testing Framework")
         subtitle.setStyleSheet("font-size: 16px; color: #666; margin-bottom: 40px;")
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(subtitle)
@@ -362,6 +368,11 @@ class MainWindow(QMainWindow):
     def _on_serial_connected(self, port: str):
         """Handle serial connection established"""
         self.status_bar.showMessage(f"Connected to {port}", 5000)
+
+        # Update test runner with command interface
+        if hasattr(self, 'test_runner'):
+            command_interface = self.serial_console.get_command_interface()
+            self.test_runner.set_command_interface(command_interface)
 
     def _on_serial_disconnected(self):
         """Handle serial disconnection"""
@@ -591,7 +602,7 @@ class MainWindow(QMainWindow):
             self,
             "About K3NG Configuration Tool",
             "<h3>K3NG Rotator Configuration & Testing Utility</h3>"
-            "<p>Phase 5 - Serial Communication</p>"
+            "<p>Phase 7 - Testing Framework</p>"
             "<p>A comprehensive tool for configuring and testing K3NG rotator controllers.</p>"
             "<p>Built with PyQt6 and PySerial</p>"
         )
