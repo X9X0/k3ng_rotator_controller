@@ -17,6 +17,7 @@ from parsers.pin_parser import PinParser, PinConfig
 from parsers.settings_parser import SettingsParser, SettingsConfig
 from validators.dependency_validator import DependencyValidator, ValidationResult
 from validators.pin_validator import PinValidator
+from validators.value_validator import ValueValidator
 from boards.board_database import BoardDatabase
 
 
@@ -89,6 +90,7 @@ class ConfigurationManager:
         self.validator = DependencyValidator()
         self.board_db = BoardDatabase()
         self.pin_validator = PinValidator(self.board_db)
+        self.value_validator = ValueValidator()
         self._loaded = False
         self._last_validation: Optional[ValidationResult] = None
 
@@ -409,6 +411,23 @@ class ConfigurationManager:
             # Update passed status
             if not pin_result.passed:
                 result.passed = False
+
+        # Run value validation on settings
+        settings_values = {
+            name: setting.value
+            for name, setting in self.settings_config.settings.items()
+        }
+
+        value_result = self.value_validator.validate(settings_values)
+
+        # Merge value validation results into main result
+        result.errors.extend(value_result.errors)
+        result.warnings.extend(value_result.warnings)
+        result.info.extend(value_result.info)
+
+        # Update passed status
+        if not value_result.passed:
+            result.passed = False
 
         self._last_validation = result
         return result
