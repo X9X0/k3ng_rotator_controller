@@ -75,7 +75,7 @@ class K3NGLauncher:
 
     def check_python_version(self):
         """Check if Python version is sufficient"""
-        self.print_step("1/6", "Checking Python version...")
+        self.print_step("1/7", "Checking Python version...")
 
         version = sys.version_info
         if version.major < 3 or (version.major == 3 and version.minor < 10):
@@ -86,9 +86,36 @@ class K3NGLauncher:
 
         self.print_success(f"Python {version.major}.{version.minor}.{version.micro} detected")
 
+    def clear_bytecode_cache(self):
+        """Clear Python bytecode cache to prevent stale import issues"""
+        self.print_step("2/7", "Clearing Python bytecode cache...")
+
+        cache_cleared = False
+
+        # Remove __pycache__ directories
+        for pycache_dir in self.script_dir.rglob('__pycache__'):
+            try:
+                shutil.rmtree(pycache_dir)
+                cache_cleared = True
+            except Exception as e:
+                self.print_warning(f"Could not remove {pycache_dir}: {e}")
+
+        # Remove .pyc files
+        for pyc_file in self.script_dir.rglob('*.pyc'):
+            try:
+                pyc_file.unlink()
+                cache_cleared = True
+            except Exception as e:
+                self.print_warning(f"Could not remove {pyc_file}: {e}")
+
+        if cache_cleared:
+            self.print_success("Bytecode cache cleared")
+        else:
+            self.print_success("No stale cache found")
+
     def setup_venv(self):
         """Setup virtual environment if not exists"""
-        self.print_step("2/6", "Setting up virtual environment...")
+        self.print_step("3/7", "Setting up virtual environment...")
 
         if self.venv_dir.exists():
             self.print_success("Virtual environment already exists")
@@ -122,7 +149,7 @@ class K3NGLauncher:
 
     def install_dependencies(self):
         """Install dependencies from requirements.txt"""
-        self.print_step("3/6", "Checking dependencies...")
+        self.print_step("4/7", "Checking dependencies...")
 
         requirements_file = self.script_dir / 'requirements.txt'
         if not requirements_file.exists():
@@ -144,7 +171,7 @@ class K3NGLauncher:
 
     def create_global_commands(self):
         """Create globally accessible commands"""
-        self.print_step("4/6", "Creating global commands...")
+        self.print_step("5/7", "Creating global commands...")
 
         if self.system == 'Windows':
             self._create_windows_commands()
@@ -217,7 +244,7 @@ class K3NGLauncher:
 
     def create_desktop_shortcut(self):
         """Create desktop shortcut"""
-        self.print_step("5/6", "Desktop shortcut creation...")
+        self.print_step("6/7", "Desktop shortcut creation...")
 
         response = input(f"{Colors.BOLD}Create desktop shortcut for GUI? (y/n): {Colors.ENDC}").lower()
 
@@ -321,7 +348,7 @@ Categories=Utility;Development;
 
     def launch_menu(self):
         """Display launch menu"""
-        self.print_step("6/6", "Ready to launch!")
+        self.print_step("7/7", "Ready to launch!")
 
         print(f"\n{Colors.BOLD}Choose an option:{Colors.ENDC}")
         print("  1. Launch GUI (Graphical Interface)")
@@ -375,6 +402,7 @@ Categories=Utility;Development;
         try:
             self.print_header()
             self.check_python_version()
+            self.clear_bytecode_cache()
             self.setup_venv()
             self.install_dependencies()
             self.create_global_commands()

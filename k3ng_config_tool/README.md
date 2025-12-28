@@ -35,6 +35,7 @@ launch.bat
 ```
 
 The launcher automatically:
+- ✅ Clears Python bytecode cache (prevents import errors)
 - ✅ Sets up virtual environment
 - ✅ Installs dependencies
 - ✅ Creates global commands (`k3ng-gui`, `k3ng-cli`)
@@ -98,6 +99,7 @@ python3 gui_main.py
 
 - **[User Guide](docs/USER_GUIDE.md)** - Complete usage documentation
 - **[Developer Guide](docs/DEVELOPER_GUIDE.md)** - Architecture and development
+- **[Development Setup](DEVELOPMENT.md)** - Setup, cache management, best practices
 - **[Phase Completion Docs](docs/)** - Implementation milestones
 
 ## System Requirements
