@@ -246,6 +246,26 @@ class FeatureSelectorWidget(QWidget):
             return self.feature_config.active_features.copy()
         return set()
 
+    def focus_category(self, category_name: str):
+        """
+        Focus on a specific category by expanding it and scrolling to it
+
+        Args:
+            category_name: Name of the category to focus on
+        """
+        if category_name in self.category_items:
+            category_item = self.category_items[category_name]
+
+            # Collapse all other categories
+            for name, item in self.category_items.items():
+                item.setExpanded(name == category_name)
+
+            # Scroll to the category
+            self.feature_tree.scrollToItem(category_item)
+
+            # Optionally highlight it temporarily
+            self.feature_tree.setCurrentItem(category_item)
+
     def set_feature_enabled(self, feature_name: str, enabled: bool):
         """Programmatically enable/disable a feature"""
         if feature_name in self.feature_items:

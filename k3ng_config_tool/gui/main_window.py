@@ -332,6 +332,23 @@ class MainWindow(QMainWindow):
         if section in self.panel_indices:
             self.content_stack.setCurrentIndex(self.panel_indices[section])
             self.status_bar.showMessage(f"Viewing: {section}")
+
+            # If clicking on a Features subcategory, focus that category in the feature selector
+            if parent and parent.text(0) == "Features" and hasattr(self, 'feature_selector'):
+                # Map navigation items to actual feature categories
+                category_map = {
+                    "Protocol Emulation": "Protocol Emulation",
+                    "Position Sensors": "Position Sensors (Azimuth)",
+                    "Display": "Display",
+                    "Tracking": "Tracking",
+                    "I2C Devices": "Clock & GPS",  # Closest match (has RTC, GPS features)
+                    "Communication": "Network & Remote",
+                    "Ancillary": "Other Features"
+                }
+
+                if item_text in category_map:
+                    self.feature_selector.focus_category(category_map[item_text])
+                    self.status_bar.showMessage(f"Viewing: {item_text} features")
         else:
             self.status_bar.showMessage(f"Selected: {full_path}")
 
