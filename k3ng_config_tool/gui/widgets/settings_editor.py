@@ -326,6 +326,26 @@ class SettingsEditorWidget(QWidget):
             f"Settings: {total} total ({eeprom} EEPROM persistent)"
         )
 
+    def focus_category(self, category_name: str):
+        """
+        Focus on a specific category by expanding it and scrolling to it
+
+        Args:
+            category_name: Name of the category to focus on
+        """
+        if category_name in self.category_items:
+            category_item = self.category_items[category_name]
+
+            # Collapse all other categories
+            for name, item in self.category_items.items():
+                item.setExpanded(name == category_name)
+
+            # Scroll to the category
+            self.setting_tree.scrollToItem(category_item)
+
+            # Highlight it
+            self.setting_tree.setCurrentItem(category_item)
+
     def get_setting_value(self, setting_name: str):
         """Get the current value of a setting"""
         if setting_name in self.setting_items:

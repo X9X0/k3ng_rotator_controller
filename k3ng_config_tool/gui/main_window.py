@@ -349,6 +349,21 @@ class MainWindow(QMainWindow):
                 if item_text in category_map:
                     self.feature_selector.focus_category(category_map[item_text])
                     self.status_bar.showMessage(f"Viewing: {item_text} features")
+
+            # If clicking on a Settings subcategory, focus that category in the settings editor
+            elif parent and parent.text(0) == "Settings" and hasattr(self, 'settings_editor'):
+                # Map navigation items to actual settings categories
+                settings_map = {
+                    "Motor Control": "Speed & Rotation",
+                    "Calibration": "Calibration Tables",
+                    "Limits": "Tolerance & Limits",
+                    "Timing": "Timing",
+                    "Other": "Other Settings"
+                }
+
+                if item_text in settings_map:
+                    self.settings_editor.focus_category(settings_map[item_text])
+                    self.status_bar.showMessage(f"Viewing: {item_text} settings")
         else:
             self.status_bar.showMessage(f"Selected: {full_path}")
 
