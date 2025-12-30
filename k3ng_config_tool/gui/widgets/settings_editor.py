@@ -341,10 +341,10 @@ class SettingsEditorWidget(QWidget):
                 item.setExpanded(name == category_name)
 
             # Scroll to the category
-            self.setting_tree.scrollToItem(category_item)
+            self.settings_tree.scrollToItem(category_item)
 
             # Highlight it
-            self.setting_tree.setCurrentItem(category_item)
+            self.settings_tree.setCurrentItem(category_item)
 
     def get_setting_value(self, setting_name: str):
         """Get the current value of a setting"""
