@@ -47,10 +47,16 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("K3NG Rotator Configuration Tool")
         self.setGeometry(100, 100, 1400, 900)
 
-        # Set window icon
-        icon_path = Path(__file__).parent.parent / "assets" / "icons" / "satellite-dish-256.png"
-        if icon_path.exists():
-            self.setWindowIcon(QIcon(str(icon_path)))
+        # Set window icon with multiple sizes for better platform support
+        icons_dir = Path(__file__).parent.parent / "assets" / "icons"
+        window_icon = QIcon()
+        for size in [16, 32, 48, 64, 128, 256]:
+            icon_path = icons_dir / f"satellite-dish-{size}.png"
+            if icon_path.exists():
+                window_icon.addFile(str(icon_path))
+
+        if not window_icon.isNull():
+            self.setWindowIcon(window_icon)
 
         # Central widget with horizontal splitter
         central_widget = QWidget()

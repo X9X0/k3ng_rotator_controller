@@ -11,6 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from PyQt6.QtWidgets import QApplication
+from PyQt6.QtGui import QIcon
 from gui.main_window import MainWindow
 
 
@@ -22,6 +23,19 @@ def main():
     app.setApplicationName("K3NG Configuration Tool")
     app.setOrganizationName("K3NG")
     app.setApplicationVersion("0.4.0")
+    app.setDesktopFileName("k3ng-config-tool.desktop")  # For Linux desktop integration
+
+    # Set application icon (for taskbar and window decorations)
+    # Add multiple sizes for better platform support
+    icons_dir = Path(__file__).parent / "assets" / "icons"
+    app_icon = QIcon()
+    for size in [16, 32, 48, 64, 128, 256]:
+        icon_path = icons_dir / f"satellite-dish-{size}.png"
+        if icon_path.exists():
+            app_icon.addFile(str(icon_path))
+
+    if not app_icon.isNull():
+        app.setWindowIcon(app_icon)
 
     # Create and show main window
     window = MainWindow()
