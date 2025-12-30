@@ -603,7 +603,7 @@ class MainWindow(QMainWindow):
             self.status_bar.showMessage("Configuration saved successfully", 5000)
 
             # Show success dialog
-            files_list = "\n".join([f"  • {f.name}" for f in generated_files[:5]])
+            files_list = "\n".join([f"  • {Path(f).name}" for f in generated_files[:5]])
             if len(generated_files) > 5:
                 files_list += f"\n  ... and {len(generated_files) - 5} more"
 
@@ -653,7 +653,7 @@ class MainWindow(QMainWindow):
             self.status_bar.showMessage(f"Configuration saved to {output_dir}", 5000)
 
             # Show success dialog
-            files_list = "\n".join([f"  • {f.name}" for f in generated_files[:5]])
+            files_list = "\n".join([f"  • {Path(f).name}" for f in generated_files[:5]])
             if len(generated_files) > 5:
                 files_list += f"\n  ... and {len(generated_files) - 5} more"
 
