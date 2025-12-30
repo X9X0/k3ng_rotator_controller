@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <!-- Satellite Dish Icon for K3NG Rotator Controller -->
+
+  <!-- Dish mount/pole -->
+  <rect x="118" y="180" width="20" height="60" fill="#4a4a4a" stroke="#333" stroke-width="2"/>
+
+  <!-- Dish base -->
+  <ellipse cx="128" cy="180" rx="35" ry="8" fill="#5a5a5a" stroke="#333" stroke-width="2"/>
+
+  <!-- Main dish (parabolic) -->
+  <path d="M 70 120 Q 70 60, 128 50 Q 186 60, 186 120 L 170 130 Q 170 75, 128 68 Q 86 75, 86 130 Z"
+        fill="#6ba3d4" stroke="#2e5c8a" stroke-width="3"/>
+
+  <!-- Dish reflector lines (to show parabolic shape) -->
+  <path d="M 90 125 Q 90 80, 128 72" fill="none" stroke="#5a9bd4" stroke-width="1.5" opacity="0.6"/>
+  <path d="M 110 130 Q 110 85, 128 76" fill="none" stroke="#5a9bd4" stroke-width="1.5" opacity="0.6"/>
+  <path d="M 146 130 Q 146 85, 128 76" fill="none" stroke="#5a9bd4" stroke-width="1.5" opacity="0.6"/>
+  <path d="M 166 125 Q 166 80, 128 72" fill="none" stroke="#5a9bd4" stroke-width="1.5" opacity="0.6"/>
+
+  <!-- LNB feed arm -->
+  <line x1="128" y1="130" x2="128" y2="90" stroke="#4a4a4a" stroke-width="4"/>
+
+  <!-- LNB (Low Noise Block) -->
+  <rect x="118" y="82" width="20" height="16" rx="2" fill="#7a7a7a" stroke="#333" stroke-width="2"/>
+  <circle cx="128" cy="90" r="3" fill="#d4a56b"/>
+
+  <!-- Support struts -->
+  <line x1="90" y1="128" x2="118" y2="100" stroke="#4a4a4a" stroke-width="2.5"/>
+  <line x1="166" y1="128" x2="138" y2="100" stroke="#4a4a4a" stroke-width="2.5"/>
+
+  <!-- Mounting bracket -->
+  <path d="M 118 165 L 128 130 L 138 165 Z" fill="#5a5a5a" stroke="#333" stroke-width="2"/>
+
+  <!-- Signal waves (emanating from LNB) -->
+  <path d="M 100 65 Q 95 50, 90 35" fill="none" stroke="#ff9900" stroke-width="2.5" opacity="0.7" stroke-linecap="round"/>
+  <path d="M 110 60 Q 108 45, 105 30" fill="none" stroke="#ff9900" stroke-width="2.5" opacity="0.7" stroke-linecap="round"/>
+  <path d="M 146 60 Q 148 45, 151 30" fill="none" stroke="#ff9900" stroke-width="2.5" opacity="0.7" stroke-linecap="round"/>
+  <path d="M 156 65 Q 161 50, 166 35" fill="none" stroke="#ff9900" stroke-width="2.5" opacity="0.7" stroke-linecap="round"/>
+
+  <!-- Highlight on dish edge -->
+  <path d="M 75 115 Q 75 65, 128 52" fill="none" stroke="#acd4f4" stroke-width="2" opacity="0.5"/>
+</svg>
