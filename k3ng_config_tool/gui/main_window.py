@@ -20,6 +20,7 @@ from gui.widgets.serial_console import SerialConsoleWidget
 from gui.widgets.test_runner_widget import TestRunnerWidget
 from gui.widgets.board_selector import BoardSelectorWidget
 from gui.widgets.validation_panel import ValidationPanel
+from gui.widgets.calibration_panel import CalibrationPanel
 from gui.dialogs.export_dialog import ExportDialog
 
 
@@ -192,12 +193,12 @@ class MainWindow(QMainWindow):
         self.content_stack.addWidget(self.validation_panel)
         self.panel_indices["Validation"] = self.content_stack.count() - 1
 
-        # Placeholder panel for calibration
-        calibration_placeholder = QLabel("Calibration panel - To be implemented in next phase")
-        calibration_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        calibration_placeholder.setStyleSheet("font-size: 14px; color: #666;")
-        self.content_stack.addWidget(calibration_placeholder)
+        # Calibration panel
+        self.calibration_panel = CalibrationPanel()
+        self.content_stack.addWidget(self.calibration_panel)
         self.panel_indices["Calibration"] = self.content_stack.count() - 1
+        self.panel_indices["Calibration/Magnetometer"] = self.content_stack.count() - 1
+        self.panel_indices["Calibration/Angular Correction"] = self.content_stack.count() - 1
 
         # Show welcome panel by default
         self.content_stack.setCurrentIndex(0)
@@ -508,10 +509,16 @@ class MainWindow(QMainWindow):
         """Handle serial connection established"""
         self.status_bar.showMessage(f"Connected to {port}", 5000)
 
+        # Get command interface from serial console
+        command_interface = self.serial_console.get_command_interface()
+
         # Update test runner with command interface
         if hasattr(self, 'test_runner'):
-            command_interface = self.serial_console.get_command_interface()
             self.test_runner.set_command_interface(command_interface)
+
+        # Update calibration panel with serial interface
+        if hasattr(self, 'calibration_panel'):
+            self.calibration_panel.set_serial_interface(command_interface)
 
     def _on_serial_disconnected(self):
         """Handle serial disconnection"""
