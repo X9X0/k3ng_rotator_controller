@@ -19,6 +19,7 @@ from gui.widgets.settings_editor import SettingsEditorWidget
 from gui.widgets.serial_console import SerialConsoleWidget
 from gui.widgets.test_runner_widget import TestRunnerWidget
 from gui.widgets.board_selector import BoardSelectorWidget
+from gui.widgets.validation_panel import ValidationPanel
 from gui.dialogs.export_dialog import ExportDialog
 
 
@@ -178,13 +179,20 @@ class MainWindow(QMainWindow):
         self.content_stack.addWidget(self.test_runner)
         self.panel_indices["Testing"] = self.content_stack.count() - 1
 
-        # Placeholder panels for other sections
-        for section in ["Validation", "Calibration"]:
-            placeholder = QLabel(f"{section} panel - To be implemented in next phase")
-            placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            placeholder.setStyleSheet("font-size: 14px; color: #666;")
-            self.content_stack.addWidget(placeholder)
-            self.panel_indices[section] = self.content_stack.count() - 1
+        # Validation panel
+        self.validation_panel = ValidationPanel()
+        self.validation_panel.validation_requested.connect(self._on_validation_requested)
+        self.validation_panel.feature_selected.connect(self._on_feature_selected)
+        self.validation_panel.fix_requested.connect(self._on_fix_requested)
+        self.content_stack.addWidget(self.validation_panel)
+        self.panel_indices["Validation"] = self.content_stack.count() - 1
+
+        # Placeholder panel for calibration
+        calibration_placeholder = QLabel("Calibration panel - To be implemented in next phase")
+        calibration_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        calibration_placeholder.setStyleSheet("font-size: 14px; color: #666;")
+        self.content_stack.addWidget(calibration_placeholder)
+        self.panel_indices["Calibration"] = self.content_stack.count() - 1
 
         # Show welcome panel by default
         self.content_stack.setCurrentIndex(0)
@@ -424,6 +432,72 @@ class MainWindow(QMainWindow):
 
             # Show status message
             self.status_bar.showMessage(f"Board selected: {board.board_name}", 5000)
+
+    def _on_validation_requested(self):
+        """Handle validation request from validation panel"""
+        if not self.config_manager:
+            QMessageBox.warning(
+                self,
+                "No Project",
+                "No project loaded. Please open a project first."
+            )
+            return
+
+        # Run validation
+        result = self.config_manager.validate()
+
+        # Update validation panel
+        self.validation_panel.set_validation_result(result)
+
+        # Update validation label
+        if result.passed:
+            self.validation_label.setText(f"Validation: ✓ Passed")
+            self.validation_label.setStyleSheet("color: #28a745;")
+        else:
+            self.validation_label.setText(f"Validation: ✗ {len(result.errors)} errors")
+            self.validation_label.setStyleSheet("color: #dc3545;")
+
+        # Show status message
+        self.status_bar.showMessage("Validation complete", 3000)
+
+    def _on_feature_selected(self, feature_name: str):
+        """Handle feature selection from validation panel"""
+        # Switch to features panel
+        if "Features" in self.panel_indices:
+            self.content_stack.setCurrentIndex(self.panel_indices["Features"])
+
+        # Try to expand and highlight the feature
+        # (FeatureSelectorWidget would need a method for this)
+        self.status_bar.showMessage(f"Navigated to feature: {feature_name}", 3000)
+
+    def _on_fix_requested(self, issues: list):
+        """Handle auto-fix request from validation panel"""
+        if not self.config_manager:
+            return
+
+        # Apply auto-fixes
+        count = self.config_manager.apply_auto_fixes()
+
+        # Re-validate
+        result = self.config_manager.validate()
+
+        # Update validation panel
+        self.validation_panel.set_validation_result(result)
+
+        # Update validation label
+        if result.passed:
+            self.validation_label.setText(f"Validation: ✓ Passed")
+            self.validation_label.setStyleSheet("color: #28a745;")
+        else:
+            self.validation_label.setText(f"Validation: ✗ {len(result.errors)} errors")
+            self.validation_label.setStyleSheet("color: #dc3545;")
+
+        # Show success message
+        QMessageBox.information(
+            self,
+            "Auto-Fix Applied",
+            f"Applied {count} automatic fixes.\n\nValidation status: {'✓ Passed' if result.passed else f'✗ {len(result.errors)} errors remaining'}"
+        )
 
     def _on_serial_connected(self, port: str):
         """Handle serial connection established"""
