@@ -268,12 +268,16 @@ class K3NGLauncher:
             desktop = Path(winshell.desktop())
             shortcut_path = desktop / 'K3NG Configuration Tool.lnk'
 
+            # Use custom icon if available
+            icon_path = self.script_dir / "assets" / "icons" / "satellite-dish-256.png"
+            icon_location = str(icon_path) if icon_path.exists() else str(self.get_venv_python())
+
             shell = Dispatch('WScript.Shell')
             shortcut = shell.CreateShortCut(str(shortcut_path))
             shortcut.Targetpath = str(self.get_venv_python())
             shortcut.Arguments = f'"{self.script_dir / "gui_main.py"}"'
             shortcut.WorkingDirectory = str(self.script_dir)
-            shortcut.IconLocation = str(self.get_venv_python())
+            shortcut.IconLocation = icon_location
             shortcut.save()
 
             self.print_success(f"Desktop shortcut created: {shortcut_path}")
@@ -291,7 +295,15 @@ class K3NGLauncher:
             # Create app bundle structure
             contents = app_dir / 'Contents'
             macos = contents / 'MacOS'
+            resources = contents / 'Resources'
             macos.mkdir(parents=True, exist_ok=True)
+            resources.mkdir(parents=True, exist_ok=True)
+
+            # Copy icon if available
+            icon_path = self.script_dir / "assets" / "icons" / "satellite-dish-256.png"
+            if icon_path.exists():
+                import shutil
+                shutil.copy(icon_path, resources / "icon.png")
 
             # Create launcher script
             launcher = macos / 'k3ng-launcher'
@@ -304,7 +316,8 @@ cd "{self.script_dir}"
 
             # Create Info.plist
             info_plist = contents / 'Info.plist'
-            plist_content = '''<?xml version="1.0" encoding="UTF-8"?>
+            icon_file = 'icon.png' if icon_path.exists() else ''
+            plist_content = f'''<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
@@ -313,7 +326,12 @@ cd "{self.script_dir}"
     <key>CFBundleName</key>
     <string>K3NG Configuration Tool</string>
     <key>CFBundleDisplayName</key>
-    <string>K3NG Configuration Tool</string>
+    <string>K3NG Configuration Tool</string>'''
+            if icon_file:
+                plist_content += f'''
+    <key>CFBundleIconFile</key>
+    <string>{icon_file}</string>'''
+            plist_content += '''
 </dict>
 </plist>
 '''
@@ -329,6 +347,10 @@ cd "{self.script_dir}"
         desktop_file = desktop / 'k3ng-config-tool.desktop'
 
         try:
+            # Add icon if available
+            icon_path = self.script_dir / "assets" / "icons" / "satellite-dish-256.png"
+            icon_line = f'Icon={icon_path}\n' if icon_path.exists() else ''
+
             content = f'''[Desktop Entry]
 Version=1.0
 Type=Application
@@ -336,7 +358,7 @@ Name=K3NG Configuration Tool
 Comment=Configure and test K3NG rotator controller
 Exec={self.get_venv_python()} {self.script_dir / "gui_main.py"}
 Path={self.script_dir}
-Terminal=false
+{icon_line}Terminal=false
 Categories=Utility;Development;
 '''
             desktop_file.write_text(content)
